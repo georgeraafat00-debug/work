@@ -1,0 +1,2419 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نظام إدارة الموظفين — نسخة ملف واحد (Offline)</title>
+<!--
+  ملف HTML واحد يشغّل النظام كاملًا بدون أي سيرفر: نفس المنطق (GPS + Haversine + الأجور + المصروفات + بصمة الجهاز + الصلاحيات)
+  على بيانات وهمية محفوظة في localStorage.
+  للدخول: admin / Admin@123  —  mona / Emp@12345
+  النسخة الحقيقية (Full-stack: Node + Express + PostgreSQL + bcrypt + JWT) في مجلد employee-management/
+-->
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#f5f7fb;--card:#fff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;
+    --brand:#2563eb;--brand-ink:#1d4ed8;--brand-soft:#eef4ff;
+    --ok:#0f9d58;--ok-soft:#e7f6ee;--warn:#b7791f;--warn-soft:#fdf3e0;--bad:#c62828;--bad-soft:#fdeceb;
+    --r:14px;--sh:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06);
+  }
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.7 "Segoe UI",Tahoma,"Noto Kufi Arabic",system-ui,sans-serif}
+  h1{font-size:22px;margin:0}h2{font-size:16px;margin:0}h3{font-size:15px;margin:0 0 6px}
+  a{color:var(--brand-ink);text-decoration:none}a:hover{text-decoration:underline}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  .muted{color:var(--muted)}.small{font-size:12.5px}.tiny{font-size:11.5px}
+  .nowrap{white-space:nowrap}.mt4{margin-top:4px}.mt8{margin-top:8px}.mt16{margin-top:16px}
+  .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+  .app{display:flex;min-height:100vh}
+  .sidebar{width:246px;flex:0 0 246px;background:#0f172a;color:#e2e8f0;padding:16px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;gap:10px;align-items:center;padding:6px 8px 14px;border-bottom:1px solid #1e293b;margin-bottom:10px}
+  .brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:grid;place-items:center;font-weight:700;color:#fff}
+  .brand-name{font-weight:700;font-size:14px}.brand-sub{font-size:11.5px;color:#94a3b8}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav-group-title{font-size:11px;color:#64748b;padding:12px 10px 4px;letter-spacing:.4px}
+  .nav a{display:flex;gap:9px;align-items:center;color:#cbd5e1;padding:9px 10px;border-radius:9px;font-size:13.5px}
+  .nav a:hover{background:#1e293b;text-decoration:none;color:#fff}
+  .nav a.active{background:var(--brand);color:#fff;font-weight:600}
+  .nav .ico{width:20px;text-align:center}
+  .nav .pill{margin-inline-start:auto;background:#334155;color:#e2e8f0;border-radius:20px;font-size:11px;padding:1px 7px}
+  .nav a.active .pill{background:#1e3a8a}
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:12px}
+  .topbar .spacer{flex:1}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-weight:700;font-size:13px}
+  .content{padding:18px;display:flex;flex-direction:column;gap:16px}
+  .page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}
+  .card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .pad{padding:16px}
+  .grid{display:grid;gap:12px;padding:16px}
+  .c2{grid-template-columns:repeat(2,minmax(0,1fr))}.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh)}
+  .stat .k{font-size:12px;color:var(--muted)}.stat .v{font-size:21px;font-weight:700;margin-top:2px}.stat .s{font-size:11.5px;color:var(--muted)}
+  .stat.brand{border-color:#c7d7fe}.stat.ok .v{color:var(--ok)}.stat.warn .v{color:var(--warn)}.stat.bad .v{color:var(--bad)}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:8px 13px;font:inherit;font-size:13.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .btn:hover{border-color:#cbd5e1;background:#fbfcfe}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}.btn.primary:hover{background:var(--brand-ink)}
+  .btn.danger{background:#fff;border-color:#f3c1c1;color:var(--bad)}.btn.danger:hover{background:var(--bad-soft)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--brand-ink)}
+  .btn.sm{padding:5px 9px;font-size:12.5px;border-radius:8px}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;background:#eef0f4;color:#374151}
+  .badge.ok{background:var(--ok-soft);color:#0b7a44}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.bad{background:var(--bad-soft);color:var(--bad)}
+  .badge.brand{background:var(--brand-soft);color:var(--brand-ink)}.badge.muted{background:#f1f3f7;color:var(--muted)}
+  .alert{border-radius:12px;padding:11px 13px;font-size:13.5px;border:1px solid var(--line);background:#fff}
+  .alert.ok{background:var(--ok-soft);border-color:#bfe6d1;color:#0b6b3d}
+  .alert.warn{background:var(--warn-soft);border-color:#f0dcae;color:#8a5a12}
+  .alert.bad{background:var(--bad-soft);border-color:#f3c1c1;color:#9c1f1f}
+  .alert.info{background:var(--brand-soft);border-color:#c7d7fe;color:#1e3a8a}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .empty{padding:22px 12px;text-align:center;color:var(--muted);font-size:13.5px}
+  .table-wrap{overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+  thead th{background:#fafbfe;font-weight:600;color:#374151;font-size:12.5px;white-space:nowrap}
+  tbody tr:hover{background:#fbfcfe}
+  td.num,th.num{text-align:center}
+  .table-compact th,.table-compact td{padding:6px 9px;font-size:12.5px}
+  .meter{height:8px;border-radius:6px;background:#eef0f4;overflow:hidden}.meter i{display:block;height:100%;background:var(--brand)}
+  .meter.ok i{background:var(--ok)}.meter.bad i{background:var(--bad)}
+  .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+  .list li{display:flex;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);font-size:13.5px}
+  .list li:last-child{border-bottom:0}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 9px}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:13.5px;padding:0 16px 14px}
+  .kv dt{color:var(--muted)}.kv dd{margin:0;font-weight:600}
+  .filters{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:12px 16px}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:140px;flex:1}
+  .field>span{font-size:12px;color:#374151;font-weight:600}
+  .req{color:var(--bad)}
+  input,select,textarea{font:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);width:100%}
+  input:focus,select:focus,textarea:focus{outline:2px solid #c7d7fe;border-color:var(--brand)}
+  input[type=checkbox]{width:17px;height:17px}
+  textarea{resize:vertical;font-family:inherit}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 12px}
+  .tabs button{border:0;background:transparent;padding:10px 12px;font:inherit;font-size:13.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  .tabs button.active{color:var(--brand-ink);border-bottom-color:var(--brand);font-weight:600}
+  .punch{display:flex;flex-direction:column;align-items:center;gap:12px;padding:22px}
+  .punch-btn{width:168px;height:168px;border-radius:50%;border:0;color:#fff;font:inherit;font-size:17px;font-weight:700;cursor:pointer;display:grid;place-items:center;gap:2px;box-shadow:0 10px 26px rgba(37,99,235,.28)}
+  .punch-btn small{font-size:11.5px;font-weight:500;opacity:.9}
+  .punch-btn.in{background:linear-gradient(140deg,#0f9d58,#0b7a44)}
+  .punch-btn.out{background:linear-gradient(140deg,#e05d5d,#b3261e);box-shadow:0 10px 26px rgba(198,40,40,.22)}
+  .punch-btn:disabled{filter:grayscale(.4);opacity:.6;cursor:not-allowed;box-shadow:none}
+  .gps-status{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .radar{background:linear-gradient(#f8fbff,#eef4ff);border:1px solid #dbe6ff;border-radius:12px}
+  .map-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);align-items:center}
+  .map-legend i{width:11px;height:11px;border-radius:3px;display:inline-block;border:1px solid var(--line)}
+  .matrix{overflow:auto;padding:0 8px 14px}
+  .matrix table{border-collapse:separate;border-spacing:2px}
+  .matrix th,.matrix td{border:0;padding:0;text-align:center;font-size:11px}
+  .matrix td.name{text-align:start;padding:4px 6px;font-size:12.5px;min-width:150px}
+  .m-cell{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;font-weight:700;font-size:11px}
+  .m-present{background:var(--ok-soft);color:#0b7a44}.m-late{background:var(--warn-soft);color:var(--warn)}
+  .m-absent{background:var(--bad-soft);color:var(--bad)}.m-off{background:#eef0f4;color:var(--muted)}
+  .backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);display:grid;place-items:center;padding:18px;z-index:60}
+  .modal{background:#fff;border-radius:16px;max-width:880px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px rgba(16,24,40,.3)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff}
+  .modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff}
+  .x{border:0;background:transparent;font-size:20px;cursor:pointer;color:var(--muted)}
+  .auth{min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(1200px 600px at 80% -10%,#dbe7ff,transparent),var(--bg)}
+  .auth-card{width:min(940px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--sh);display:grid;grid-template-columns:1.05fr .95fr;overflow:hidden}
+  .auth-side{background:#0f172a;color:#e2e8f0;padding:26px}
+  .auth-side ul{list-style:none;padding:0;margin:14px 0 0;font-size:13px;display:flex;flex-direction:column;gap:9px}
+  .auth-side li{display:flex;gap:9px}
+  .auth-form{padding:26px;display:flex;flex-direction:column;gap:11px}
+  .toast-host{position:fixed;bottom:16px;inset-inline-start:16px;display:flex;flex-direction:column;gap:8px;z-index:80}
+  .toast{background:#0f172a;color:#fff;border-radius:11px;padding:10px 14px;font-size:13px;box-shadow:var(--sh);max-width:380px}
+  .toast.ok{background:#0b6b3d}.toast.bad{background:#9c1f1f}.toast.warn{background:#8a5a12}
+  .spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .off{display:none!important}
+  @media(max-width:1080px){.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:860px){
+    .sidebar{position:fixed;inset-inline-start:-260px;transition:.25s;z-index:50}
+    body.nav-open .sidebar{inset-inline-start:0;box-shadow:0 0 60px rgba(0,0,0,.4)}
+    .auth-card{grid-template-columns:1fr}.auth-side{display:none}.c2,.c4{grid-template-columns:1fr}.kv{grid-template-columns:110px 1fr}
+  }
+  @media print{.sidebar,.topbar,.filters,.btn,.tabs{display:none!important}.card{box-shadow:none;border-color:#ccc}body{background:#fff}.content{padding:0}}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="auth">
+  <div class="auth-card">
+    <div class="auth-side">
+      <div class="inline"><div class="brand-mark">EMS</div><div><div class="brand-name">نظام إدارة الموظفين</div><div class="tiny" style="color:#94a3b8">حضور GPS · أجور · مصروفات · أمان أجهزة</div></div></div>
+      <ul>
+        <li>📍 <span>تسجيل حضور/انصراف بموقعك الجغرافي — خارج النطاق لا يتم التسجيل مع رسالة واضحة.</span></li>
+        <li>💰 <span>الأجر = الساعات الفعلية من السجل × سعر الساعة الخاص بكل موظف.</span></li>
+        <li>🧾 <span>مصروفات عامة أو مرتبطة بموظف + تقارير حسب الفئة والشهر.</span></li>
+        <li>🛡️ <span>بصمة الجهاز عند الدخول وتنبيه فوري للأدمن عند ظهور جهاز جديد.</span></li>
+        <li>👥 <span>صلاحيتان: أدمن بكل الصلاحيات، وموظف يرى بياناته فقط.</span></li>
+      </ul>
+      <div class="tiny mt16" style="color:#94a3b8">نسخة تجريبية ببيانات وهمية في ملف HTML واحد (بدون سيرفر). النسخة الحقيقية: Node + Express + PostgreSQL + bcrypt + JWT.</div>
+    </div>
+    <form class="auth-form" id="loginForm" autocomplete="off">
+      <h1 style="font-size:19px">تسجيل الدخول</h1>
+      <label class="field"><span>اسم المستخدم</span><input id="username" value="admin" required></label>
+      <label class="field"><span>كلمة المرور</span><input id="password" type="password" value="Admin@123" required></label>
+      <div id="loginAlert"></div>
+      <button class="btn primary" id="submitBtn" style="justify-content:center;padding:11px">دخول</button>
+      <div class="hint">حسابات جاهزة: <b>admin / Admin@123</b> · <b>mona / Emp@12345</b> (وبقية الموظفين بنفس كلمة المرور)</div>
+      <div class="inline mt8">
+        <button type="button" class="btn sm ghost" data-quick="admin">دخول كأدمن</button>
+        <button type="button" class="btn sm ghost" data-quick="mona">دخول كموظف</button>
+        <button type="button" class="btn sm ghost" id="resetDemo">↺ إعادة ضبط البيانات</button>
+      </div>
+      <div class="tiny muted mt8" id="fpHint"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="app off">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">EMS</div>
+      <div><div class="brand-name">نظام الموظفين</div><div class="brand-sub" id="wpName">—</div></div>
+    </div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="tiny mt16" style="color:#64748b;padding:0 10px" id="sideFoot"></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <button class="btn sm ghost" id="burger">☰</button>
+      <h1 id="pageTitle">—</h1>
+      <div class="spacer"></div>
+      <span class="badge brand" id="todayBadge">—</span>
+      <button class="btn sm ghost" id="bellBtn">🔔 <b id="bellCount">0</b></button>
+      <div class="avatar" id="avatar">—</div>
+      <button class="btn sm" id="logoutBtn">خروج</button>
+    </header>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+<div id="modalHost"></div>
+
+<script>
+/* ============================================================================
+   EMS-Offline — نسخة ملف واحد (بدون سيرفر)
+   منطق النظام الحقيقي كاملًا في المتصفح + بيانات وهمية في localStorage
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /* ---------------- utilities ---------------- */
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.prototype.slice.call(document.querySelectorAll(s));
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function h(tag, attrs, kids) {
+    const n = document.createElement(tag);
+    for (const k in (attrs || {})) {
+      const v = attrs[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'html') n.innerHTML = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k === 'class') n.className = v;
+      else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    (Array.isArray(kids) ? kids : kids ? [kids] : []).forEach((c) => { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+
+  const DBREF = () => (typeof DB !== 'undefined' && DB && DB.settings) || null;
+  const tzOf = () => (DBREF() && DBREF().timezone) || 'Africa/Cairo';
+  const pad = (n) => String(n).padStart(2, '0');
+  const parts = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: tzOf(), year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(iso));
+  const pget = (iso) => { const ps = parts(iso); const g = (t) => (ps.find((p) => p.type === t) || {}).value; return { y: +g('year'), m: +g('month'), d: +g('day'), hh: +g('hour'), mi: +g('minute') }; };
+  const dateStr = (iso) => { if (!iso) return '—'; const x = pget(iso); return x.y + '-' + pad(x.m) + '-' + pad(x.d); };
+  const timeStr = (iso) => { if (!iso) return '—'; const x = pget(iso); return pad(x.hh) + ':' + pad(x.mi); };
+  const dateTimeStr = (iso) => (iso ? dateStr(iso) + ' ' + timeStr(iso) : '—');
+  const dmy = (ds) => (ds ? ds.slice(8, 10) + '/' + ds.slice(5, 7) : '—');
+  const todayStr = () => dateStr(new Date().toISOString());
+  const monthStr = (d) => String(d).slice(0, 7);
+  const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  const monthLabel = (m) => { const a = String(m).split('-'); return (MONTHS[(+a[1]) - 1] || '') + ' ' + a[0]; };
+  const DAY_NAMES = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+  const dayName = (ds) => DAY_NAMES[new Date(ds + 'T00:00:00Z').getUTCDay()];
+  const minutesStr = (mm) => { mm = Math.round(Number(mm) || 0); return mm > 0 ? Math.floor(mm / 60) + ' س ' + (mm % 60) + ' د' : '0'; };
+  const timeAgo = (iso) => {
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'الآن'; if (s < 3600) return Math.floor(s / 60) + ' دقيقة';
+    if (s < 86400) return Math.floor(s / 3600) + ' ساعة'; return Math.floor(s / 86400) + ' يوم';
+  };
+  const uid = () => 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const money = (cents) => (Number(cents || 0) / 100).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + ((DBREF() && DBREF().currency_symbol) || 'ج.م');
+  const num = (v, d) => Number(v || 0).toLocaleString('ar-EG', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d });
+
+  const STATUS = {
+    present: { label: 'حاضر', cls: 'ok' }, late: { label: 'متأخر', cls: 'warn' }, absent: { label: 'غائب', cls: 'bad' },
+    leave: { label: 'إجازة', cls: 'brand' }, holiday: { label: 'عطلة', cls: 'muted' }, off: { label: 'راحة', cls: 'muted' },
+    success: { label: 'نجاح', cls: 'ok' }, failed: { label: 'فشل', cls: 'bad' }
+  };
+  const statusBadge = (s) => '<span class="badge ' + ((STATUS[s] || {}).cls || 'muted') + '">' + esc((STATUS[s] || { label: s || '—' }).label) + '</span>';
+  const REASON = {
+    out_of_range: 'خارج النطاق', poor_accuracy: 'GPS ضعيف', too_early: 'مبكر', already_in: 'مكرر', already_out: 'مقفل',
+    no_check_in: 'بلا دخول', gps_denied: 'إذن مرفوض', gps_error: 'خطأ GPS', gps_missing: 'لا إحداثيات', unknown_device: 'جهاز غير معتاد',
+    manual: 'تسجيل يدوي', gps_verified: 'تم بالـ GPS'
+  };
+  const reasonText = (r) => REASON[r] || r || 'مرفوض';
+
+  /* نفس رسائل النظام الحقيقي حرفيًا */
+  const MESSAGES = {
+    out_of_range: 'لازم تكون في مكان الشغل عشان تسجل حضور',
+    out_of_range_out: 'لازم تكون في مكان الشغل عشان تسجل الانصراف',
+    gps_denied: 'المتصفح رفض إذن الموقع — فعّل GPS وامنح إذن Location ثم أعد المحاولة',
+    gps_unsupported: 'متصفحك لا يدعم تحديد الموقع (Geolocation)',
+    poor_accuracy: 'دقة الـ GPS ضعيفة جدًا — اتأكد إنك في مكان مفتوح وجرّب تاني',
+    already_in: 'أنت سجّلت الحضور بالفعل. اضغط «تسجيل انصراف» في نهاية اليوم',
+    already_out: 'اليوم مقفل بالفعل — تم تسجيل الانصراف',
+    no_check_in: 'لم تسجّل حضور اليوم، سجّل الحضور أولًا',
+    unknown_device: 'لا يمكن تسجيل الحضور من جهاز غير معتاد — تواصل مع الإدارة'
+  };
+
+  function toast(msg, kind, ms) {
+    const t = h('div', { class: 'toast ' + (kind || ''), html: msg });
+    $('#toastHost').appendChild(t);
+    setTimeout(() => { t.style.transition = '.3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); }, ms || 3200);
+  }
+
+  function modal(opts) {
+    const box = h('div', { class: 'modal', style: 'max-width:' + (opts.width || '880px') });
+    const back = h('div', { class: 'backdrop' });
+    const close = () => back.remove();
+    box.appendChild(h('div', { class: 'modal-head' }, [h('h2', { html: opts.title || '' }), h('button', { class: 'x', text: '×', onclick: close })]));
+    const body = h('div', { class: 'pad' });
+    if (typeof opts.body === 'string') body.innerHTML = opts.body; else if (opts.body) body.appendChild(opts.body);
+    box.appendChild(body);
+    if (opts.footer && opts.footer.length) box.appendChild(h('div', { class: 'modal-foot' }, opts.footer));
+    back.appendChild(box);
+    back.addEventListener('click', (e) => { if (e.target === back) close(); });
+    $('#modalHost').appendChild(back);
+    return { close: close, body: body };
+  }
+  function confirmBox(text, title) {
+    return new Promise((res) => {
+      const yes = h('button', { class: 'btn primary', text: 'نعم، متابعة' });
+      const no = h('button', { class: 'btn', text: 'إلغاء' });
+      const m = modal({ title: title || 'تأكيد', body: '<p>' + esc(text) + '</p>', footer: [no, yes], width: '440px' });
+      no.onclick = () => { m.close(); res(false); };
+      yes.onclick = () => { m.close(); res(true); };
+    });
+  }
+  function table(cols, rows, opts) {
+    opts = opts || {};
+    const wrap = h('div', { class: 'table-wrap' });
+    const t = h('table'); if (opts.compact) t.className = 'table-compact';
+    const trh = h('tr');
+    cols.forEach((c) => trh.appendChild(h('th', { class: c.align === 'center' ? 'num' : '', text: c.label })));
+    t.appendChild(h('thead', {}, [trh]));
+    const tb = h('tbody');
+    if (!rows.length) tb.appendChild(h('tr', {}, [h('td', { colspan: cols.length, html: '<div class="empty">' + esc(opts.emptyText || 'لا بيانات') + '</div>' })]));
+    rows.forEach((r, i) => {
+      const tr = h('tr');
+      cols.forEach((c) => {
+        const td = h('td', { class: c.align === 'center' ? 'num' : '' });
+        const v = c.render ? c.render(r, i) : r[c.key];
+        if (v instanceof Node) td.appendChild(v); else td.innerHTML = v == null ? '' : String(v);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); wrap.appendChild(t);
+    if (opts.footer) wrap.appendChild(h('div', { class: 'pad', style: 'border-top:1px solid var(--line)', html: opts.footer }));
+    return wrap;
+  }
+  function csv(name, headers, keys, rows) {
+    const line = (arr) => arr.map((v) => { const s = v == null ? '' : String(v).replace(/"/g, '""'); return /[,">\n]/.test(s) || s.indexOf('"') > -1 ? '"' + s + '"' : s; }).join(',');
+    const text = '\ufeff' + [line(headers)].concat(rows.map((r) => line(keys.map((k) => (typeof k === 'function' ? k(r) : r[k]))))).join('\n');
+    const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })), download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('تم تنزيل ' + esc(name), 'ok');
+  }
+
+  /* ---------------- Haversine (نفس server/lib/geo.js) ---------------- */
+  function haversineM(lat1, lng1, lat2, lng2) {
+    const R = 6371008.8, rad = (d) => d * Math.PI / 180;
+    const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+
+  /* ---------------- قاعدة البيانات الوهمية ---------------- */
+  const LS = 'ems-offline-db-v1';
+  let DB = null;
+
+  function tzOffsetMinutes(ds) {
+    const d = new Date(ds + 'T00:00:00Z');
+    const loc = new Date(d.toLocaleString('en-US', { timeZone: tzOf() }));
+    return Math.round((loc - d) / 60000);
+  }
+  function isoLocal(ds, hh, mi) {
+    return new Date(Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10), hh, mi) - tzOffsetMinutes(ds) * 60000).toISOString();
+  }
+  const rnd = (seed) => { const x = Math.sin(seed) * 10000; return x - Math.floor(x); };
+  const hmToMin = (s) => { const a = String(s || '0:0').split(':'); return (+a[0]) * 60 + (+a[1] || 0); };
+  const localMinutes = (iso) => { const x = pget(iso); return x.hh * 60 + x.mi; };
+
+  function seedDB() {
+    const RATES = { mona: 5500, ahmed: 4500, karim: 4000, sara: 5000, mahmoud: 3500 };
+    const EMP = [
+      { username: 'mona', full_name: 'منى عبد الرحمن', job_title: 'محاسبة أولى', department: 'المالية', phone: '01000000002' },
+      { username: 'ahmed', full_name: 'أحمد سعيد', job_title: 'فني صيانة', department: 'العمليات', phone: '01000000003' },
+      { username: 'karim', full_name: 'كريم فؤاد', job_title: 'مندوب مبيعات', department: 'المبيعات', phone: '01000000004' },
+      { username: 'sara', full_name: 'سارة ناجي', job_title: 'أخصائي موارد بشرية', department: 'الإدارة', phone: '01000000005' },
+      { username: 'mahmoud', full_name: 'محمود جابر', job_title: 'سائق', department: 'العمليات', phone: '01000000006' }
+    ];
+    const db = {
+      settings: {
+        workplace_name: 'المقر الرئيسي — مدينة نصر', workplace_address: 'شارع عباس العقاد، القاهرة',
+        workplace_lat: 30.0635, workplace_lng: 31.3284, radius_m: 150, max_accuracy_m: 120,
+        timezone: 'Africa/Cairo', work_start_time: '09:00', work_end_time: '17:00', standard_hours_per_day: 8,
+        grace_minutes: 10, break_minutes: 30, min_hours_for_break: 5, rounding_minutes: 0, overtime_multiplier: 1.5,
+        allow_check_in_before: 120, auto_close_open_shift: 1, allow_admin_punch: 1,
+        require_usual_device: 0, device_alert_enabled: 1, email_alerts_enabled: 0, alert_email: '',
+        currency_symbol: 'ج.م', currency_code: 'EGP', week_start_day: 6, off_days: '5',
+        password_min_length: 8, session_ttl_hours: 12, app_title: 'نظام إدارة الموظفين', logo_text: 'EMS'
+      },
+      users: [{
+        id: 1, username: 'admin', full_name: 'إدارة النظام', role: 'admin', status: 'active', job_title: 'مدير',
+        department: 'الإدارة', email: 'admin@work.local', phone: '01000000001', password: 'Admin@123',
+        hourly_rate_cents: 0, hired_on: '2023-01-01', custom_fields: {}, address: '', emergency_contact: '', notes: '',
+        created_at: '2023-01-01T00:00:00.000Z', last_login_at: null
+      }],
+      attendance: [], attendanceEvents: [], expenses: [], adjustments: [], devices: [], loginEvents: [],
+      notifications: [], pages: [], fields: [
+        { id: 1, label: 'الرقم التأميني', type: 'text', is_active: 1 },
+        { id: 2, label: 'سنة الرخصة', type: 'number', is_active: 1 },
+        { id: 3, label: 'هل يعمل في الوردية الليلية؟', type: 'checkbox', is_active: 1 }
+      ]
+    };
+    EMP.forEach((e, i) => {
+      db.users.push({
+        id: i + 2, username: e.username, full_name: e.full_name, role: 'employee', status: 'active', job_title: e.job_title,
+        department: e.department, email: e.username + '@work.local', phone: e.phone, password: 'Emp@12345',
+        hourly_rate_cents: RATES[e.username], hired_on: '2024-0' + ((i % 8) + 1) + '-1' + (i + 1),
+        custom_fields: { 'الرقم التأميني': '297' + (1000 + i * 37) + '01', 'سنة الرخصة': 2019 + i, 'هل يعمل في الوردية الليلية؟': i % 2 === 0 },
+        address: 'القاهرة', emergency_contact: '0100000' + (9000 + i), notes: '', created_at: '2024-0' + (i + 1) + '-05T00:00:00.000Z', last_login_at: null
+      });
+    });
+    const now = new Date();
+    let aid = 1;
+    db.users.filter((u) => u.role === 'employee').forEach((u, ui) => {
+      for (let k = 1; k <= 30; k++) {
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - k, 12, 0, 0));
+        if (d.getUTCDay() === 5) continue;
+        const r = rnd(ui * 977 + k * 31);
+        if (r < 0.05) continue;
+        const late = r > 0.82;
+        const ds = d.toISOString().slice(0, 10);
+        const inMin = late ? 55 + Math.round(r * 15) : 2 + Math.round(r * 7);
+        const outMin = 5 + Math.round(r * 45);
+        const dist = 5 + Math.round(r * 90);
+        db.attendance.push({
+          id: aid++, user_id: u.id, work_date: ds,
+          check_in_at: isoLocal(ds, 9, inMin), check_in_lat: db.settings.workplace_lat + (r - 0.5) / 900,
+          check_in_lng: db.settings.workplace_lng + (r - 0.5) / 900, check_in_acc: 6 + Math.round(r * 20),
+          check_in_dist: dist, check_in_source: 'gps',
+          check_out_at: isoLocal(ds, 17, outMin), check_out_lat: db.settings.workplace_lat + (r - 0.5) / 800,
+          check_out_lng: db.settings.workplace_lng + (r - 0.5) / 800, check_out_acc: 7 + Math.round(r * 18),
+          check_out_dist: dist + 4, check_out_source: 'gps',
+          break_minutes: 30, status: late ? 'late' : 'present', is_open: 0, worked_minutes: 0, late_minutes: 0,
+          note: null, created_at: isoLocal(ds, 9, inMin), updated_at: isoLocal(ds, 17, outMin)
+        });
+      }
+    });
+    [{ u: 3, reason: 'out_of_range', dist: 860, acc: 20 }, { u: 4, reason: 'poor_accuracy', dist: 40, acc: 420 },
+      { u: 5, reason: 'gps_denied', dist: null, acc: null }, { u: 2, reason: 'too_early', dist: 30, acc: 25 }]
+      .forEach((x, i) => db.attendanceEvents.push({
+        id: i + 1, user_id: x.u, action: 'check_in',
+        occurred_at: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (i + 1), 7, 12)).toISOString(),
+        lat: null, lng: null, accuracy: x.acc, distance: x.dist, allowed: 0, reason: x.reason, note: null
+      }));
+    const EX = [
+      ['صيانة تكييف الدور الثاني', 245000, 'صيانة', null, 'شركة التكييف الحديثة', 'تحويل بنكي', 'INV-2291'],
+      ['ورق وطابعات', 48900, 'مكتبية', null, 'مكتبة النيل', 'نقدي', ''],
+      ['بدل مواصلات ميدانية', 15000, 'بدلات', 4, '', 'نقدي', ''],
+      ['اشتراك إنترنت شهري', 62000, 'اتصالات', null, 'WE', 'تحويل بنكي', 'INV-8830'],
+      ['تدريب فريق المبيعات', 180000, 'تدريب', 5, 'أكاديمية مبيعات', 'فيزا', ''],
+      ['وقود سيارات الشركة', 33000, 'مواصلات', 7, 'شركة النفط', 'محفظة إلكترونية', ''],
+      ['إصلاح سيارة النقل', 76000, 'صيانة', 7, 'ورشة الشرق', 'آجل', ''],
+      ['هدية عيد ميلاد موظف', 12000, 'حوافز', 2, '', 'نقدي', ''],
+      ['اشتراك برنامج محاسبة', 99000, 'برمجيات', null, 'Zoho', 'فيزا', 'INV-4410'],
+      ['ضيافة اجتماعات', 21000, 'ضيافة', null, 'مطعم بيتي', 'نقدي', '']
+    ];
+    EX.forEach((e, i) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), Math.max(1, now.getUTCDate() - i * 3), 10, 0));
+      db.expenses.push({
+        id: i + 1, title: e[0], amount_cents: e[1], category: e[2], user_id: e[3], vendor: e[4],
+        payment_method: e[5], invoice_no: e[6], note: null, spent_on: d.toISOString().slice(0, 10),
+        created_by: 1, created_at: d.toISOString()
+      });
+    });
+    const curMonth = monthStr(dateStr(new Date().toISOString()));
+    db.adjustments = [
+      { id: 1, user_id: 2, type: 'bonus', amount_cents: 50000, reason: 'إنهاء الجرد السنوي', month: curMonth, created_at: new Date().toISOString() },
+      { id: 2, user_id: 4, type: 'deduction', amount_cents: 12000, reason: 'تأخير متكرر', month: curMonth, created_at: new Date().toISOString() }
+    ];
+    db.pages = [
+      { id: 1, title: 'لائحة الحضور والانصراف', slug: 'attendance-policy', icon: '📜', section: 'both', audience: 'all', sort_order: 10, is_active: 1, updated_at: new Date().toISOString(), content: '<h2>سياسة الحضور والانصراف</h2><ul><li>بداية العمل <b>9:00 ص</b> ونهايته <b>5:00 م</b>.</li><li>يُسجَّل الحضور من زرّ «تسجيل حضور» داخل نطاق مكان العمل الجغرافي (150 مترًا).</li><li>التأخير أكثر من <b>10 دقائق</b> يظهر في كشف الحضور ويُراجع شهريًا.</li><li>الإجازة تُطلب كتابيًا قبل يومين على الأقل.</li></ul><div class="alert info">أي مخالفة تُراجع مع الإدارة في أول أسبوع من الشهر.</div>' },
+      { id: 2, title: 'روابط وأرقام تهمك', slug: 'useful-links', icon: '🔗', section: 'both', audience: 'all', sort_order: 20, is_active: 1, updated_at: new Date().toISOString(), content: '<h2>روابط داخلية</h2><table class="table-compact"><thead><tr><th>الغرض</th><th>التواصل</th></tr></thead><tbody><tr><td>الدعم الفني</td><td>تحويلة 202</td></tr><tr><td>الشؤون الإدارية</td><td>سارة ناجي</td></tr><tr><td>طلبات الصيانة</td><td>أحمد سعيد</td></tr></tbody></table>' },
+      { id: 3, title: 'ملاحظات الإدارة (سري)', slug: 'monthly-note', icon: '🔒', section: 'admin', audience: 'admin', sort_order: 30, is_active: 1, updated_at: new Date().toISOString(), content: '<h2>ملاحظات الإدارة</h2><p>هذا القسم يظهر للأدمن فقط — جرّب الدخول كموظف ولن تجده في القائمة الجانبية.</p>' }
+    ];
+    db.notifications = [{
+      id: 1, audience: 'admin', user_id: null, type: 'info', title: 'مرحبًا بك في النسخة التجريبية',
+      message: 'هذه نسخة تعمل في ملف HTML واحد بدون سيرفر — البيانات تُحفظ في متصفحك (localStorage) فقط.',
+      link: '', severity: 'info', is_read: 0, created_at: new Date().toISOString()
+    }];
+    return db;
+  }
+
+  function save() { try { localStorage.setItem(LS, JSON.stringify(DB)); } catch (e) { } }
+  function load() {
+    try { const raw = localStorage.getItem(LS); if (raw) { DB = JSON.parse(raw); if (DB && DB.settings) return; } } catch (e) { }
+    DB = seedDB(); save();
+  }
+
+  /* ---------------- الحساب: الساعات والأجر (نفس evaluate في الخادم) ---------------- */
+  function evaluate(row) {
+    const s = DB.settings;
+    const stdMin = (+s.standard_hours_per_day || 8) * 60;
+    const startMin = hmToMin(s.work_start_time);
+    const br = Number(row.break_minutes != null ? row.break_minutes : s.break_minutes) || 0;
+    let worked = 0, late = 0;
+    const inM = row.check_in_at ? localMinutes(row.check_in_at) : null;
+    const outM = row.check_out_at ? localMinutes(row.check_out_at) : (inM == null ? null : Math.max(0, localMinutes(new Date().toISOString())));
+    if (inM != null) {
+      const end = outM == null ? inM : outM;
+      worked = Math.max(0, end - inM);
+      if (worked >= (+s.min_hours_for_break || 0) * 60) worked -= br;
+      const rm = +s.rounding_minutes || 0;
+      if (rm > 0) worked = Math.round(worked / rm) * rm;
+      worked = Math.max(0, worked);
+      late = Math.max(0, inM - startMin - (+s.grace_minutes || 0));
+    }
+    const u = DB.users.find((x) => x.id === row.user_id) || {};
+    const rate = Number(u.hourly_rate_cents || 0);
+    const reg = Math.min(worked, stdMin), ot = Math.max(0, worked - stdMin);
+    const mult = Number(s.overtime_multiplier) || 1;
+    return {
+      workedMinutes: worked, workedHours: +(worked / 60).toFixed(2), lateMinutes: late, breakMinutes: br,
+      overtimeMinutes: ot, grossPayCents: Math.round(((reg + ot * mult) / 60) * rate),
+      status: inM == null ? (row.status || 'absent') : (late > 0 ? 'late' : 'present'),
+      assumedOut: !row.check_out_at
+    };
+  }
+  function rangeFor(period, o) {
+    o = o || {};
+    const t = todayStr();
+    if (period === 'weekly') {
+      const base = new Date((o.weekOf || t) + 'T00:00:00Z');
+      const ws = +DB.settings.week_start_day;
+      const diff = (base.getUTCDay() - ws + 7) % 7;
+      const from = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() - diff));
+      const to = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() + 6));
+      return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), label: 'أسبوعي' };
+    }
+    if (period === 'custom' && o.from && o.to) return { from: o.from, to: o.to, label: 'مخصص' };
+    const m = o.month || monthStr(t);
+    const last = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).toISOString().slice(0, 10);
+    return { from: m + '-01', to: last < t ? last : t, label: monthLabel(m) };
+  }
+  function payrollFor(userId, period, o) {
+    const range = rangeFor(period, o);
+    const rows = DB.attendance.filter((a) => a.user_id === userId && a.work_date >= range.from && a.work_date <= range.to)
+      .sort((a, b) => (a.work_date < b.work_date ? -1 : 1));
+    const days = [];
+    const tot = { workedMinutes: 0, workedHours: 0, lateMinutes: 0, grossPayCents: 0, presentDays: 0, absentDays: 0, expectedDays: 0, openShifts: 0, overtimeHours: 0, bonusCents: 0, allowanceCents: 0, deductionCents: 0, netPayCents: 0, adjustments: [] };
+    rows.forEach((r) => {
+      const c = evaluate(r);
+      tot.workedMinutes += c.workedMinutes; tot.lateMinutes += c.lateMinutes; tot.grossPayCents += c.grossPayCents;
+      tot._ot = (tot._ot || 0) + c.overtimeMinutes;
+      if (c.status === 'present' || c.status === 'late') tot.presentDays++;
+      if (!r.check_out_at) tot.openShifts++;
+      days.push({
+        id: r.id, workDate: r.work_date, checkInAt: r.check_in_at, checkOutAt: r.check_out_at,
+        workedHours: c.workedHours, dayGrossCents: c.grossPayCents, status: c.status, lateMinutes: c.lateMinutes,
+        inDist: r.check_in_dist, inSource: r.check_in_source
+      });
+    });
+    const offDays = String(DB.settings.off_days || '5').split(',').map((x) => +x.trim());
+    let expected = 0;
+    for (let d = new Date(range.from + 'T00:00:00Z'); d <= new Date(range.to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+      if (offDays.indexOf(d.getUTCDay()) === -1) expected++;
+    }
+    tot.expectedDays = expected;
+    tot.absentDays = Math.max(0, expected - tot.presentDays - (range.to >= todayStr() ? 1 : 0));
+    tot.workedHours = +(tot.workedMinutes / 60).toFixed(2);
+    tot.overtimeHours = +((tot._ot || 0) / 60).toFixed(2);
+    delete tot._ot;
+    const month = monthStr(range.from);
+    tot.adjustments = DB.adjustments.filter((a) => a.user_id === userId && a.month === month);
+    tot.bonusCents = tot.adjustments.filter((a) => a.type === 'bonus').reduce((s, a) => s + a.amount_cents, 0);
+    tot.allowanceCents = tot.adjustments.filter((a) => a.type === 'allowance').reduce((s, a) => s + a.amount_cents, 0);
+    tot.deductionCents = tot.adjustments.filter((a) => a.type === 'deduction').reduce((s, a) => s + a.amount_cents, 0);
+    tot.netPayCents = tot.grossPayCents + tot.bonusCents + tot.allowanceCents - tot.deductionCents;
+    const u = DB.users.find((x) => x.id === userId) || {};
+    tot.hourlyRateCents = Number(u.hourly_rate_cents || 0);
+    return { user: u, range: range, days: days, totals: tot };
+  }
+
+  /* ---------------- بصمة الجهاز ---------------- */
+  async function sha(text) {
+    if (window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
+      try {
+        const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return Array.prototype.map.call(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+      } catch (e) { }
+    }
+    let x = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) { x ^= text.charCodeAt(i); x = Math.imul(x, 0x01000193); }
+    return (x >>> 0).toString(16).padStart(8, '0').repeat(4).slice(0, 32);
+  }
+  function deviceUuid() {
+    let v = '';
+    try { v = localStorage.getItem('ems-offline-uuid') || ''; } catch (e) { }
+    if (!v) { v = 'dev-' + uid(); try { localStorage.setItem('ems-offline-uuid', v); } catch (e) { } }
+    return v;
+  }
+  function safeTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Cairo'; } catch (e) { return 'Africa/Cairo'; } }
+  async function collectFingerprint() {
+    const n = navigator, sc = window.screen || {};
+    const info = {
+      deviceUuid: deviceUuid(), userAgent: n.userAgent || '', platform: n.platform || '', language: n.language || '',
+      languages: (n.languages || []).join(','), timezone: safeTz(), zoneOffset: -new Date().getTimezoneOffset(),
+      screenW: sc.width || 0, screenH: sc.height || 0, colorDepth: sc.colorDepth || 0,
+      touchPoints: n.maxTouchPoints || 0, hardwareConcurrency: n.hardwareConcurrency || 0, deviceMemory: n.deviceMemory || 0
+    };
+    const basis = JSON.stringify([info.userAgent, info.language, info.timezone, info.screenW + 'x' + info.screenH + 'x' + info.colorDepth,
+      info.languages.length, info.touchPoints, info.hardwareConcurrency, info.deviceMemory, info.platform, info.zoneOffset]);
+    info.hash = await sha(info.deviceUuid + '|' + basis);
+    info.short = info.hash.slice(0, 8);
+    const ua = info.userAgent;
+    info.os = /Windows/i.test(ua) ? 'Windows' : /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iPod/i.test(ua) ? 'iOS'
+      : /Mac OS X/i.test(ua) ? 'macOS' : /Linux/i.test(ua) ? 'Linux' : 'غير معروف';
+    info.browser = /Edg\//i.test(ua) ? 'Edge' : /Chrome\//i.test(ua) ? 'Chrome' : /Firefox\//i.test(ua) ? 'Firefox'
+      : /Safari\//i.test(ua) ? 'Safari' : 'متصفح آخر';
+    info.label = info.browser + ' على ' + info.os + ' · ' + info.screenW + '×' + info.screenH;
+    return info;
+  }
+
+  /* ---------------- الدخول والصلاحيات ---------------- */
+  const SESSION = { user: null };
+  async function doLogin(username, password) {
+    const uname = String(username || '').trim().toLowerCase();
+    const u = DB.users.find((x) => x.username === uname);
+    const now = new Date().toISOString();
+    const fp = await collectFingerprint();
+    if (!u || u.password !== password) {
+      DB.loginEvents.push({ id: DB.loginEvents.length + 1, user_id: u ? u.id : null, username: uname, success: 0, is_usual: null, reason: u ? 'wrong_password' : 'unknown_user', occurred_at: now, ip: 'localhost', device_label: fp.label, user_agent: fp.userAgent });
+      save();
+      throw new Error(u ? 'كلمة المرور غير صحيحة' : 'اسم المستخدم غير موجود');
+    }
+    if (u.status !== 'active') throw new Error('الحساب موقوف — تواصل مع الإدارة');
+    let dev = DB.devices.find((d) => d.user_id === u.id && d.hash === fp.hash);
+    const usual = DB.devices.filter((d) => d.user_id === u.id && d.is_usual).sort((a, b) => (a.last_seen_at < b.last_seen_at ? 1 : -1))[0];
+    let isNew = false, firstEver = false;
+    if (!dev) {
+      firstEver = !usual; isNew = !!usual;
+      dev = {
+        id: DB.devices.length + 1, user_id: u.id, hash: fp.hash, short: fp.short, label: fp.label, os: fp.os, browser: fp.browser,
+        screen: fp.screenW + '×' + fp.screenH, language: fp.language, timezone: fp.timezone, user_agent: fp.userAgent,
+        is_usual: firstEver ? 1 : 0, trusted: firstEver ? 1 : 0, login_count: 0, first_seen_at: now, last_seen_at: now,
+        notes: firstEver ? 'الجهاز الأول — اعتُمد تلقائيًا' : null
+      };
+      DB.devices.push(dev);
+    }
+    dev.login_count++; dev.last_seen_at = now;
+    u.last_login_at = now;
+    DB.loginEvents.push({
+      id: DB.loginEvents.length + 1, user_id: u.id, username: u.username, success: 1,
+      is_usual: firstEver ? -1 : (dev.is_usual ? 1 : 0),
+      reason: firstEver ? 'first_device_registered' : (isNew ? 'new_device' : (dev.trusted ? 'usual_device' : 'untrusted_device')),
+      occurred_at: now, ip: 'localhost', device_label: fp.label, user_agent: fp.userAgent, device_id: dev.id
+    });
+    if (isNew && +DB.settings.device_alert_enabled === 1) {
+      DB.notifications.push({
+        id: DB.notifications.length + 1, audience: 'admin', user_id: null, type: 'new_device',
+        title: 'تسجيل دخول من جهاز غير معتاد',
+        message: 'الموظف ' + u.full_name + ' (@' + u.username + ') سجّل دخولًا من جهاز جديد: ' + fp.label + ' — الساعة ' + dateTimeStr(now),
+        link: '', severity: 'warning', is_read: 0, created_at: now
+      });
+    }
+    save();
+    SESSION.user = u;
+    return { user: u, device: { id: dev.id, short: fp.short, label: fp.label, isUsual: !!dev.is_usual, isNewDevice: isNew, firstEverDevice: firstEver } };
+  }
+  function logout() {
+    if (SESSION.user) DB.loginEvents.push({ id: DB.loginEvents.length + 1, user_id: SESSION.user.id, username: SESSION.user.username, success: 1, is_usual: 1, reason: 'logout', occurred_at: new Date().toISOString(), ip: 'localhost', device_label: '', user_agent: '' });
+    save();
+    SESSION.user = null;
+    try { localStorage.removeItem('ems-offline-session'); } catch (e) { }
+    $('#app').classList.add('off');
+    $('#loginScreen').classList.remove('off');
+  }
+
+  /* ---------------- الموقع الجغرافي + التسجيل ---------------- */
+  let DEMO_POS = null;
+  function locate(opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      if (DEMO_POS) return resolve(Object.assign({ demo: true }, DEMO_POS));
+      if (!navigator.geolocation) return reject(Object.assign(new Error(MESSAGES.gps_unsupported), { code: 'gps_unsupported' }));
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+        (e) => reject(Object.assign(new Error(e.code === 1 ? MESSAGES.gps_denied : 'تعذّر تحديد الموقع — جرّب مرة أخرى'), { code: e.code === 1 ? 'gps_denied' : 'gps_error' })),
+        { enableHighAccuracy: opts.highAccuracy !== false, timeout: opts.timeoutMs || 12000, maximumAge: 0 }
+      );
+    });
+  }
+  function previewDistance(p) {
+    const s = DB.settings;
+    const wp = { lat: +s.workplace_lat, lng: +s.workplace_lng, radiusM: +s.radius_m, name: s.workplace_name };
+    const distance = +haversineM(p.lat, p.lng, wp.lat, wp.lng).toFixed(1);
+    return { distance: distance, radius: wp.radiusM, inRange: distance <= wp.radiusM, outsideBy: Math.max(0, Math.round(distance - wp.radiusM)), workplace: wp };
+  }
+  function pushEvent(o) { o.id = DB.attendanceEvents.length + 1; DB.attendanceEvents.push(o); }
+  function notifyAudience(audience, o) { DB.notifications.push(Object.assign({ id: DB.notifications.length + 1, audience: audience, user_id: null, link: '', severity: 'info', is_read: 0, created_at: new Date().toISOString() }, o)); }
+
+  async function punch(u, action) {
+    const s = DB.settings;
+    const wp = { lat: +s.workplace_lat, lng: +s.workplace_lng, radiusM: +s.radius_m, name: s.workplace_name };
+    let p;
+    try { p = await locate({ highAccuracy: true }); }
+    catch (err) {
+      pushEvent({ user_id: u.id, action: action, occurred_at: new Date().toISOString(), lat: null, lng: null, accuracy: null, distance: null, allowed: 0, reason: err.code || 'gps_error', note: err.message });
+      if (err.code === 'gps_denied') notifyAudience('admin', { type: 'gps_denied', title: 'مشكلة في تحديد الموقع', message: u.full_name + ' واجه مشكلة في إذن الـ GPS (' + MESSAGES.gps_denied + ')', severity: 'warning' });
+      save();
+      throw err;
+    }
+    const dist = +haversineM(p.lat, p.lng, wp.lat, wp.lng).toFixed(1);
+    if (+s.require_usual_device === 1 && u.role !== 'admin') {
+      const fp = await collectFingerprint();
+      const d = DB.devices.find((x) => x.user_id === u.id && x.hash === fp.hash);
+      if (!d || !d.is_usual || !d.trusted) {
+        pushEvent({ user_id: u.id, action: action, occurred_at: new Date().toISOString(), lat: p.lat, lng: p.lng, accuracy: p.accuracy, distance: dist, allowed: 0, reason: 'unknown_device', note: 'جهاز غير معتاد' });
+        notifyAudience('admin', { type: 'device_policy', title: 'محاولة تسجيل حضور من جهاز غير معتاد', message: u.full_name + ' حاول تسجيل ' + (action === 'check_in' ? 'حضور' : 'انصراف') + ' من جهاز: ' + fp.label, severity: 'warning' });
+        save();
+        throw Object.assign(new Error(MESSAGES.unknown_device), { status: 403, code: 'unknown_device', deviceLabel: fp.label, deviceHash: fp.short });
+      }
+    }
+    const today = todayStr();
+    let row = DB.attendance.find((a) => a.user_id === u.id && a.work_date === today);
+    if (action === 'check_in') {
+      if (row && row.check_in_at) throw Object.assign(new Error(MESSAGES.already_in), { code: 'already_in' });
+      if (dist > wp.radiusM) {
+        pushEvent({ user_id: u.id, action: action, occurred_at: new Date().toISOString(), lat: p.lat, lng: p.lng, accuracy: p.accuracy, distance: dist, allowed: 0, reason: 'out_of_range', note: null });
+        save();
+        throw Object.assign(new Error(MESSAGES.out_of_range), { status: 403, code: 'out_of_range', distance: dist, radius: wp.radiusM, outsideBy: Math.round(dist - wp.radiusM), workplace: wp });
+      }
+      if (+s.max_accuracy_m > 0 && Number.isFinite(p.accuracy) && p.accuracy > +s.max_accuracy_m) {
+        pushEvent({ user_id: u.id, action: action, occurred_at: new Date().toISOString(), lat: p.lat, lng: p.lng, accuracy: p.accuracy, distance: dist, allowed: 0, reason: 'poor_accuracy', note: null });
+        save();
+        throw Object.assign(new Error(MESSAGES.poor_accuracy), { status: 412, code: 'poor_accuracy', accuracy: Math.round(p.accuracy), maxAccuracy: +s.max_accuracy_m, distance: dist });
+      }
+    } else {
+      if (!row || !row.check_in_at) throw Object.assign(new Error(MESSAGES.no_check_in), { code: 'no_check_in' });
+      if (row.check_out_at) throw Object.assign(new Error(MESSAGES.already_out), { code: 'already_out' });
+      if (dist > wp.radiusM) {
+        pushEvent({ user_id: u.id, action: action, occurred_at: new Date().toISOString(), lat: p.lat, lng: p.lng, accuracy: p.accuracy, distance: dist, allowed: 0, reason: 'out_of_range', note: null });
+        save();
+        throw Object.assign(new Error(MESSAGES.out_of_range_out), { status: 403, code: 'out_of_range', distance: dist, radius: wp.radiusM, outsideBy: Math.round(dist - wp.radiusM), workplace: wp });
+      }
+    }
+    const stamp = new Date().toISOString();
+    if (!row) {
+      row = { id: DB.attendance.reduce((m, a) => Math.max(m, a.id || 0), 0) + 1, user_id: u.id, work_date: today, break_minutes: +s.break_minutes, note: null, created_at: stamp };
+      DB.attendance.push(row);
+    }
+    if (action === 'check_in') Object.assign(row, { check_in_at: stamp, check_in_lat: p.lat, check_in_lng: p.lng, check_in_acc: Math.round(p.accuracy || 0), check_in_dist: dist, check_in_source: 'gps' });
+    else Object.assign(row, { check_out_at: stamp, check_out_lat: p.lat, check_out_lng: p.lng, check_out_acc: Math.round(p.accuracy || 0), check_out_dist: dist, check_out_source: 'gps' });
+    row.updated_at = stamp;
+    const c = evaluate(row);
+    Object.assign(row, { worked_minutes: c.workedMinutes, late_minutes: c.lateMinutes, status: c.status, is_open: row.check_out_at ? 0 : 1 });
+    pushEvent({ user_id: u.id, action: action, occurred_at: stamp, lat: p.lat, lng: p.lng, accuracy: Math.round(p.accuracy || 0), distance: dist, allowed: 1, reason: 'gps_verified', note: null });
+    if (action === 'check_out' && c.workedMinutes < ((+s.standard_hours_per_day || 8) * 60 - 60)) {
+      notifyAudience('admin', { type: 'short_shift', title: 'وردية أقصر من المعتاد', message: u.full_name + ' سجّل انصرافًا بعد ' + (c.workedMinutes / 60).toFixed(2) + ' ساعة فقط' });
+    }
+    save();
+    return { row: row, computed: c, distance: dist, pos: p, workplace: wp };
+  }
+
+  /* ---------------- خريطة رادار بـ SVG (بدون أي مكتبة) ---------------- */
+  function radarSVG(marks) {
+    const S = 260, C = S / 2;
+    const s = DB.settings;
+    const wp = { lat: +s.workplace_lat, lng: +s.workplace_lng };
+    const R = +s.radius_m || 100;
+    const m = (C - 26) / (R * 2.2);
+    let out = '<svg viewBox="0 0 ' + S + ' ' + S + '" width="100%" style="display:block;max-width:300px;margin:auto">';
+    out += '<rect x="0" y="0" width="' + S + '" height="' + S + '" rx="12" fill="#f6f9ff" stroke="#dbe6ff"/>';
+    [1.6, 2.2].forEach((k) => {
+      out += '<circle cx="' + C + '" cy="' + C + '" r="' + (R * m * k).toFixed(1) + '" fill="none" stroke="#c7d7fe" stroke-dasharray="3 4"/>';
+    });
+    out += '<circle cx="' + C + '" cy="' + C + '" r="' + (R * m).toFixed(1) + '" fill="rgba(37,99,235,.14)" stroke="#2563eb" stroke-width="1.4"/>';
+    out += '<text x="' + C + '" y="' + (C - R * m - 6).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#1d4ed8">نطاق السماح ' + R + ' م</text>';
+    out += '<circle cx="' + C + '" cy="' + C + '" r="6" fill="#1d4ed8"/><circle cx="' + C + '" cy="' + C + '" r="11" fill="none" stroke="#1d4ed8" opacity=".4"/>';
+    out += '<text x="' + C + '" y="' + (C + 22) + '" text-anchor="middle" font-size="9" fill="#0f172a">' + esc(String(s.workplace_name).split('—')[0].trim()) + '</text>';
+    (marks || []).forEach((p) => {
+      if (p.lat == null || p.lng == null) return;
+      const dLat = (p.lat - wp.lat) * 111320;
+      const dLng = (p.lng - wp.lng) * 111320 * Math.cos(wp.lat * Math.PI / 180);
+      const dist = haversineM(p.lat, p.lng, wp.lat, wp.lng);
+      const ang = Math.atan2(dLng, dLat);
+      const r = Math.min(dist * m, C - 14);
+      const x = C + Math.sin(ang) * r, y = C - Math.cos(ang) * r;
+      const inside = dist <= R;
+      out += '<line x1="' + C + '" y1="' + C + '" x2="' + x.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="' + (inside ? '#b7e4c7' : '#f3c1c1') + '" stroke-dasharray="2 3"/>'
+        + '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (inside ? 6 : 5) + '" fill="' + (inside ? '#0f9d58' : '#c62828') + '"/>'
+        + '<text x="' + x.toFixed(1) + '" y="' + (y + 15).toFixed(1) + '" text-anchor="middle" font-size="8.5" fill="#334155">' + esc(String(p.name || '').split(' ')[0]) + '</text>';
+    });
+    out += '</svg>';
+    return '<div class="radar">' + out + '</div><div class="map-legend mt8"><span><i style="background:#0f9d58"></i>داخل النطاق</span>'
+      + '<span><i style="background:#c62828"></i>خارج النطاق</span><span><i style="background:#1d4ed8;border-radius:50%"></i>مكان العمل</span>'
+      + '<a class="tiny" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=' + wp.lat + '&mlon=' + wp.lng + '#map=17/' + wp.lat + '/' + wp.lng + '">فتح في OSM ↗</a></div>';
+  }
+  const todayMarks = () => DB.attendance.filter((a) => a.work_date === todayStr()).map((a) => ({ name: (DB.users.find((u) => u.id === a.user_id) || {}).full_name, lat: a.check_in_lat, lng: a.check_in_lng }));
+
+  /* ---------------- التنقل ---------------- */
+  const VIEWS = {
+    admin: [['📊', 'لوحة التحكم', 'dashboard'], ['👥', 'الموظفون', 'employees'], ['📅', 'الحضور والانصراف', 'attendance'],
+      ['💰', 'كشف الأجور', 'payroll'], ['🧾', 'المصروفات', 'expenses'], ['🛡️', 'الأمان والأجهزة', 'security'],
+      ['📄', 'الصفحات والأقسام', 'pages'], ['⚙️', 'الإعدادات', 'settings'], ['📘', 'توثيق المشروع', 'docs']],
+    employee: [['🏠', 'صفحتي', 'mydash'], ['📍', 'تسجيل الحضور', 'mypunch'], ['💰', 'أجري', 'mypayroll'],
+      ['🧾', 'مصروفاتي', 'myexpenses'], ['👤', 'بياناتي', 'myprofile']]
+  };
+  let CURRENT = 'dashboard';
+  const isAdmin = () => SESSION.user && SESSION.user.role === 'admin';
+  const visiblePages = () => DB.pages.filter((p) => p.is_active && (p.audience === 'all' || p.audience === SESSION.user.role));
+  const card = (title, bodyEl, head) => h('div', { class: 'card' }, [h('div', { class: 'card-head' }, [h('h2', { html: title })].concat(head || [])), bodyEl]);
+  const statsRow = (arr) => h('div', { class: 'grid c4' }, arr.map((c) => h('div', { class: 'stat ' + (c.cls || '') }, [
+    h('div', { class: 'k', html: c.k }), h('div', { class: 'v', html: String(c.v) }), h('div', { class: 's', html: c.s || '' })])));
+  const pageHead = (title, actions) => h('div', { class: 'page-head' }, [h('h1', { html: title }), h('div', { class: 'inline' }, actions || [])]);
+
+  function renderNav() {
+    const nav = $('#mainNav');
+    nav.innerHTML = '';
+    nav.appendChild(h('div', { class: 'nav-group-title', text: 'القائمة' }));
+    VIEWS[SESSION.user.role].forEach((item) => {
+      const ico = item[0], label = item[1], id = item[2];
+      const nUnread = DB.notifications.filter((x) => x.type === 'new_device' && !x.is_read).length;
+      const pill = id === 'security' && nUnread ? '<span class="pill">' + nUnread + '</span>' : '';
+      nav.appendChild(h('a', {
+        href: '#', class: CURRENT === id ? 'active' : '', onclick: (e) => { e.preventDefault(); go(id); },
+        html: '<span class="ico">' + ico + '</span><span>' + esc(label) + '</span>' + pill
+      }));
+    });
+    const extra = visiblePages();
+    if (extra.length) {
+      nav.appendChild(h('div', { class: 'nav-group-title', text: 'أقسام إضافية' }));
+      extra.forEach((p) => nav.appendChild(h('a', {
+        href: '#', class: CURRENT === 'page:' + p.slug ? 'active' : '', onclick: (e) => { e.preventDefault(); go('page:' + p.slug); },
+        html: '<span class="ico">' + esc(p.icon || '📄') + '</span><span>' + esc(p.title) + '</span>'
+      })));
+    }
+    const n = DB.notifications.filter((x) => !x.is_read && (x.audience === 'admin' ? isAdmin() : x.user_id === SESSION.user.id)).length;
+    $('#bellCount').textContent = n;
+  }
+  function titleFor(v) {
+    if (v.indexOf('page:') === 0) { const p = DB.pages.find((x) => 'page:' + x.slug === v); return p ? p.title : 'صفحة'; }
+    const hit = VIEWS.admin.concat(VIEWS.employee).find((x) => x[2] === v);
+    return hit ? hit[1] : '—';
+  }
+  function go(view) {
+    CURRENT = view;
+    document.body.classList.remove('nav-open');
+    renderNav();
+    $('#pageTitle').textContent = titleFor(view);
+    const host = $('#content');
+    host.innerHTML = '';
+    if (view.indexOf('page:') === 0) return renderCustomPage(host, view.slice(5));
+    const fn = RENDER[view];
+    if (fn) fn(host);
+    window.scrollTo(0, 0);
+  }
+  /* ==================== RENDERERS ==================== */
+  const RENDER = {};
+
+  RENDER.dashboard = (host) => {
+    const t = todayStr(), m = monthStr(t);
+    const emps = DB.users.filter((u) => u.role === 'employee');
+    const todayRows = DB.attendance.filter((a) => a.work_date === t);
+    const openShifts = todayRows.filter((a) => a.check_in_at && !a.check_out_at);
+    const lateToday = todayRows.filter((a) => a.check_in_at && evaluate(a).lateMinutes > 0);
+    const per = emps.map((u) => ({ u: u, p: payrollFor(u.id, 'monthly', { month: m }) }));
+    const monthGross = per.reduce((s, x) => s + x.p.totals.grossPayCents, 0);
+    const monthNet = per.reduce((s, x) => s + x.p.totals.netPayCents, 0);
+    const monthHours = per.reduce((s, x) => s + x.p.totals.workedHours, 0);
+    const monthExp = DB.expenses.filter((e) => e.spent_on >= m + '-01');
+    const expTotal = monthExp.reduce((s, e) => s + e.amount_cents, 0);
+    const alerts = DB.notifications.filter((x) => x.audience === 'admin' && !x.is_read);
+
+    host.appendChild(pageHead('أهلًا، ' + esc(SESSION.user.full_name) + ' 👋', [
+      h('div', { class: 'small muted', text: dayName(t) + ' ' + dmy(t) + ' · ' + DB.settings.workplace_name }),
+      h('button', { class: 'btn sm', text: '↻ تحديث', onclick: () => go('dashboard') }),
+      h('button', { class: 'btn sm', text: '🖨 طباعة', onclick: () => window.print() })
+    ]));
+    host.appendChild(statsRow([
+      { k: '👥 موظفون نشطون', v: emps.filter((u) => u.status === 'active').length, s: emps.length + ' إجمالًا' },
+      { k: '📅 سجّلوا اليوم', v: todayRows.length + '/' + emps.length, cls: 'ok', s: lateToday.length + ' متأخر · ' + openShifts.length + ' مفتوح' },
+      { k: '⏱ ساعات الشهر', v: num(monthHours), s: 'ساعات فعلية من الـ GPS' },
+      { k: '💰 صافي أجور الشهر', v: money(monthNet), cls: 'brand', s: 'أساسي ' + money(monthGross) },
+      { k: '🧾 مصروفات الشهر', v: money(expTotal), s: monthExp.length + ' بند' },
+      { k: '🔔 تنبيهات جديدة', v: alerts.length, cls: alerts.length ? 'warn' : 'ok', s: alerts.length ? 'تحتاج مراجعة' : 'لا شيء معلّق' },
+      { k: '💻 أجهزة مسجّلة', v: DB.devices.length, s: DB.devices.filter((d) => !d.trusted).length + ' غير معتمد' },
+      { k: '🚫 محاولات مرفوضة اليوم', v: DB.attendanceEvents.filter((e) => !e.allowed && dateStr(e.occurred_at) === t).length, s: 'خارج النطاق / GPS / جهاز' }
+    ]));
+
+    const g1 = h('div', { class: 'grid c2', style: 'align-items:start' });
+    g1.appendChild(card('🗺️ مكان العمل وحضور اليوم', h('div', { class: 'pad' }, [
+      h('div', { html: radarSVG(todayMarks()) }),
+      h('div', { class: 'kv mt8', style: 'padding:0', html: '<dt>المركز</dt><dd class="mono">' + DB.settings.workplace_lat + ', ' + DB.settings.workplace_lng + '</dd><dt>نطاق السماح</dt><dd>' + DB.settings.radius_m + ' م</dd><dt>العنوان</dt><dd>' + esc(DB.settings.workplace_address) + '</dd>' })
+    ])));
+    g1.appendChild(card('👥 حالة الموظفين اليوم', table([
+      { label: 'الموظف', render: (u) => '<b>' + esc(u.full_name) + '</b><div class="small muted">' + esc(u.job_title || '') + '</div>' },
+      { label: 'دخول', align: 'center', render: (u) => { const r = todayRows.find((x) => x.user_id === u.id); return r && r.check_in_at ? '<b class="mono">' + timeStr(r.check_in_at) + '</b>' : '<span class="badge muted">لم يسجّل</span>'; } },
+      { label: 'خروج', align: 'center', render: (u) => { const r = todayRows.find((x) => x.user_id === u.id); return r && r.check_out_at ? '<b class="mono">' + timeStr(r.check_out_at) + '</b>' : (r && r.check_in_at ? '<span class="badge warn">مفتوح</span>' : '—'); } },
+      { label: 'الحالة', align: 'center', render: (u) => { const r = todayRows.find((x) => x.user_id === u.id); return statusBadge(r ? evaluate(r).status : 'absent'); } },
+      { label: 'صافي الشهر', align: 'center', render: (u) => '<b>' + money((per.find((x) => x.u.id === u.id) || { p: { totals: {} } }).p.totals.netPayCents) + '</b>' }
+    ], emps, { emptyText: 'لا موظفين' })));
+    host.appendChild(g1);
+
+    const g2 = h('div', { class: 'grid c2', style: 'align-items:start' });
+    g2.appendChild(card('🔔 تنبيهات الأجهزة غير المعتادة',
+      alerts.length ? h('ul', { class: 'list', html: alerts.slice(0, 6).map((a) => '<li><span class="dot warn"></span><div style="flex:1"><b>' + esc(a.title) + '</b><div class="small muted">' + esc(a.message) + '</div></div><span class="tiny muted">' + esc(timeAgo(a.created_at)) + '</span></li>').join('') }) : h('div', { class: 'empty', text: 'لا تنبيهات — كل الأجهزة معتادة ✓' }),
+      [h('button', { class: 'btn sm', text: 'مراجعة', onclick: () => go('security') })]));
+    g2.appendChild(card('🚫 آخر المحاولات المرفوضة', table([
+      { label: 'الموظف', render: (e) => esc((DB.users.find((u) => u.id === e.user_id) || {}).full_name || '—') },
+      { label: 'الوقت', render: (e) => '<span class="small mono">' + dateTimeStr(e.occurred_at) + '</span>' },
+      { label: 'السبب', align: 'center', render: (e) => '<span class="badge bad">' + esc(reasonText(e.reason)) + '</span>' },
+      { label: 'المسافة', align: 'center', render: (e) => (e.distance != null ? Math.round(e.distance) + ' م' : '—') }
+    ], DB.attendanceEvents.filter((e) => !e.allowed).slice(-6).reverse(), { compact: true, emptyText: 'لا محاولات مرفوضة ✓' })));
+    host.appendChild(g2);
+
+    const byCat = {};
+    monthExp.forEach((e) => { const k = e.category || 'متفرقات'; byCat[k] = (byCat[k] || 0) + e.amount_cents; });
+    const catArr = Object.keys(byCat).map((k) => [k, byCat[k]]).sort((a, b) => b[1] - a[1]);
+    const catMax = Math.max.apply(null, [1].concat(catArr.map((x) => x[1])));
+    host.appendChild(h('div', { class: 'grid c2', style: 'align-items:start' }, [
+      card('📊 مصروفات الشهر حسب الفئة', h('div', { class: 'pad', html: catArr.length ? '<ul class="list" style="padding:0">' + catArr.map((x) => '<li style="padding:7px 0"><span style="flex:0 0 110px" class="small">' + esc(x[0]) + '</span><span class="meter" style="flex:1"><i style="width:' + Math.round(x[1] / catMax * 100) + '%"></i></span><b class="nowrap">' + money(x[1]) + '</b></li>').join('') + '</ul>' : '<div class="empty">لا مصروفات هذا الشهر</div>' })),
+      card('💵 أجور الشهر حسب الموظف', table([
+        { label: 'الموظف', render: (x) => esc(x.u.full_name) },
+        { label: 'ساعات', align: 'center', render: (x) => num(x.p.totals.workedHours) },
+        { label: 'أساسي', align: 'center', render: (x) => money(x.p.totals.grossPayCents) },
+        { label: 'صافي', align: 'center', render: (x) => '<b>' + money(x.p.totals.netPayCents) + '</b>' }
+      ], per.slice().sort((a, b) => b.p.totals.netPayCents - a.p.totals.netPayCents), { compact: true, footer: '<b>الإجمالي: ' + money(monthNet) + '</b>' }))
+    ]));
+  };
+
+  RENDER.employees = (host) => {
+    const m = monthStr(todayStr());
+    const rows = DB.users.map((u) => {
+      const t = payrollFor(u.id, 'monthly', { month: m }).totals;
+      return Object.assign({}, u, { worked_hours: t.workedHours, gross_pay_cents: t.grossPayCents, net: t.netPayCents, days_present: t.presentDays, devices: DB.devices.filter((d) => d.user_id === u.id).length });
+    });
+
+    function exportEmployees() {
+      csv('employees.csv', ['id', 'يوزر', 'الاسم', 'الوظيفة', 'القسم', 'بريد', 'موبايل', 'صلاحية', 'حالة', 'سعر الساعة', 'تعيين', 'ساعات الشهر', 'صافي الشهر', 'آخر دخول'],
+        ['id', 'username', 'full_name', 'job_title', 'department', 'email', 'phone', 'role', 'status', (r) => (r.hourly_rate_cents / 100).toFixed(2), 'hired_on', 'worked_hours', (r) => (r.net / 100).toFixed(2), (r) => (r.last_login_at || '')], rows);
+    }
+    function fieldsManager() {
+      const listEl = h('ul', { class: 'list', style: 'border:1px solid var(--line);border-radius:10px;overflow:hidden' });
+      const draw = () => {
+        listEl.innerHTML = '';
+        DB.fields.forEach((fl) => listEl.appendChild(h('li', {}, [
+          h('b', { text: fl.label, style: 'flex:1' }), h('span', { class: 'badge muted', text: fl.type }),
+          h('button', { class: 'btn sm danger', text: '🗑', onclick: () => { DB.fields = DB.fields.filter((x) => x.id !== fl.id); save(); draw(); } })
+        ])));
+        const label = h('input', { placeholder: 'مثال: رقم البدلة' });
+        const type = h('select', { style: 'max-width:140px' });
+        type.innerHTML = ['text', 'number', 'date', 'textarea', 'checkbox'].map((t) => '<option value="' + t + '">' + t + '</option>').join('');
+        listEl.appendChild(h('li', {}, [label, type, h('button', { class: 'btn sm primary', text: '➕ إضافة', onclick: () => { if (!label.value.trim()) return toast('اكتب اسم الحقل', 'warn'); DB.fields.push({ id: Date.now(), label: label.value.trim(), type: type.value, is_active: 1 }); save(); draw(); } })]));
+      };
+      draw();
+      modal({ title: '⚙️ الحقول المخصصة', width: '560px', body: h('div', {}, [h('div', { class: 'hint', style: 'margin-bottom:8px', text: 'تظهر هذه الحقول في نموذج الموظف ويمكن للأدمن تعبئتها بحرية.' }), listEl]) });
+    }
+    function quickRate(u) {
+      const inp = h('input', { type: 'number', step: '0.5', min: '0', value: (u.hourly_rate_cents / 100).toFixed(2) });
+      const saveBtn = h('button', { class: 'btn primary', text: 'حفظ' });
+      const preview = h('div', { class: 'hint' });
+      const calc = () => {
+        const c = Math.round((+inp.value || 0) * 100);
+        preview.innerHTML = 'اليومي (8 س): <b>' + money(c * 8) + '</b> · الشهري (~22 يوم): <b>' + money(c * 8 * 22) + '</b>';
+      };
+      inp.addEventListener('input', calc); calc();
+      const mm = modal({
+        title: '💰 سعر الساعة — ' + esc(u.full_name), width: '440px',
+        body: h('div', { class: 'grid' }, [h('label', { class: 'field' }, [h('span', { text: 'السعر (' + DB.settings.currency_symbol + ' / ساعة)' }), inp]), preview, saveBtn])
+      });
+      saveBtn.onclick = () => { u.hourly_rate_cents = Math.round((+inp.value || 0) * 100); save(); toast('تم تحديث سعر الساعة → ' + money(u.hourly_rate_cents) + ' / ساعة', 'ok'); mm.close(); go('employees'); };
+    }
+    function empForm(u) {
+      const isNew = !u;
+      const f = {}, cf = {};
+      const add = (label, id, tag, attrs) => {
+        const i = h(tag || 'input', Object.assign({ id: id }, attrs || {}));
+        if (u && u[id] != null && id !== 'password') i.value = u[id];
+        f[id] = i;
+        return h('label', { class: 'field' }, [h('span', { html: label }), i]);
+      };
+      const sel = (id, opts, cur, labelText) => {
+        const s = h('select');
+        s.innerHTML = opts.map((o) => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
+        s.value = cur; f[id] = s;
+        return h('label', { class: 'field' }, [h('span', { text: labelText }), s]);
+      };
+      const cfHost = h('div', { class: 'grid c2', style: 'grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;margin-top:6px' });
+      cfHost.appendChild(h('h3', { style: 'grid-column:1/-1', text: 'حقول مخصصة' }));
+      DB.fields.filter((x) => x.is_active).forEach((fl) => {
+        const cur = u && u.custom_fields ? u.custom_fields[fl.label] : null;
+        let i;
+        if (fl.type === 'checkbox') { i = h('input', { type: 'checkbox' }); i.checked = !!cur; i._chk = true; }
+        else i = h(fl.type === 'textarea' ? 'textarea' : 'input', { type: fl.type === 'number' ? 'number' : fl.type === 'date' ? 'date' : 'text' });
+        if (cur != null && !i._chk) i.value = cur;
+        cf[fl.label] = i;
+        cfHost.appendChild(h('label', { class: 'field' }, [h('span', { text: fl.label }), i]));
+      });
+      cfHost.appendChild(h('button', { class: 'btn sm ghost', style: 'grid-column:1/-1;justify-content:flex-start', text: '⚙️ إدارة الحقول المخصصة', onclick: fieldsManager }));
+      const body = h('div', { class: 'grid c2' }, [
+        add('الاسم الكامل <b class="req">*</b>', 'full_name', 'input', { required: true, value: u ? u.full_name : '' }),
+        add('اسم المستخدم <b class="req">*</b>', 'username', 'input', { required: true, value: u ? u.username : '', disabled: u ? 'disabled' : null }),
+        add('كلمة المرور ' + (isNew ? '<b class="req">*</b>' : '(فارغة = بلا تغيير)'), 'password', 'input', { type: 'password', placeholder: isNew ? 'مثال: Pass@12345' : '••••••' }),
+        add('سعر الساعة (' + DB.settings.currency_symbol + ') <b class="req">*</b>', 'hourly_rate', 'input', { type: 'number', step: '0.5', min: '0', value: u ? (u.hourly_rate_cents / 100).toFixed(2) : '45' }),
+        add('الوظيفة', 'job_title', 'input', { value: u ? u.job_title || '' : '' }),
+        add('القسم', 'department', 'input', { value: u ? u.department || '' : '' }),
+        add('البريد الإلكتروني', 'email', 'input', { type: 'email', value: u ? u.email || '' : '' }),
+        add('الموبايل', 'phone', 'input', { value: u ? u.phone || '' : '' }),
+        add('تاريخ التعيين', 'hired_on', 'input', { type: 'date', value: u ? u.hired_on || '' : '' }),
+        sel('status', [['active', 'نشط'], ['suspended', 'موقوف']], u ? u.status : 'active', 'الحالة'),
+        sel('role', [['employee', 'موظف (بياناته فقط)'], ['admin', 'أدمن (كل الصلاحيات)']], u ? u.role : 'employee', 'الصلاحية'),
+        cfHost
+      ]);
+      const saveBtn = h('button', { class: 'btn primary', text: isNew ? 'إضافة الموظف' : 'حفظ التعديل' });
+      const mm = modal({
+        title: isNew ? '➕ موظف جديد' : '✏️ ' + esc(u.full_name), width: '780px', body: body,
+        footer: [h('button', { class: 'btn', text: 'إلغاء', onclick: () => mm.close() }), saveBtn]
+      });
+      saveBtn.onclick = () => {
+        const uname = String(f.username.value || '').trim().toLowerCase();
+        const errs = [];
+        if (!f.full_name.value.trim()) errs.push('الاسم مطلوب');
+        if (uname.length < 3) errs.push('اسم المستخدم 3 أحرف على الأقل');
+        if (isNew && DB.users.some((x) => x.username === uname)) errs.push('اسم المستخدم مستخدم بالفعل');
+        const pwd = f.password.value;
+        if (isNew && !pwd) errs.push('كلمة المرور مطلوبة');
+        if (pwd && pwd.length < +DB.settings.password_min_length) errs.push('كلمة المرور أقصر من ' + DB.settings.password_min_length + ' محرف');
+        if (!(+f.hourly_rate.value >= 0)) errs.push('سعر الساعة غير صالح');
+        if (errs.length) return toast(errs.join(' · '), 'bad', 6000);
+        const data = {
+          full_name: f.full_name.value.trim(), job_title: f.job_title.value.trim(), department: f.department.value.trim(),
+          email: f.email.value.trim(), phone: f.phone.value.trim(), hired_on: f.hired_on.value,
+          status: f.status.value, role: f.role.value, hourly_rate_cents: Math.round((+f.hourly_rate.value || 0) * 100)
+        };
+        data.custom_fields = {};
+        Object.keys(cf).forEach((k) => { data.custom_fields[k] = cf[k]._chk ? !!cf[k].checked : cf[k].value; });
+        if (isNew) {
+          data.id = DB.users.reduce((mx, x) => Math.max(mx, x.id), 0) + 1;
+          data.username = uname; data.password = pwd; data.created_at = new Date().toISOString(); data.last_login_at = null;
+          DB.users.push(data);
+          notifyAudience('admin', { type: 'user_created', title: 'إضافة موظف جديد', message: 'تمت إضافة ' + data.full_name + ' (@' + uname + ') بساعة ' + money(data.hourly_rate_cents) });
+        } else {
+          Object.assign(u, data);
+          if (pwd) u.password = pwd;
+        }
+        save(); toast(isNew ? 'تم إنشاء الحساب ✓ (يمكنه الدخول فورًا)' : 'تم الحفظ ✓', 'ok'); mm.close(); go('employees');
+      };
+    }
+
+    host.appendChild(pageHead('إدارة الموظفين', [
+      h('button', { class: 'btn primary', text: '➕ إضافة موظف', onclick: () => empForm() }),
+      h('button', { class: 'btn', text: '⬇ تصدير CSV', onclick: exportEmployees })
+    ]));
+    const tt = table([
+      { label: 'الموظف', render: (r) => '<b>' + esc(r.full_name) + '</b><div class="small muted">@' + esc(r.username) + ' · ' + esc(r.job_title || '') + ' · ' + esc(r.department || '') + '</div>' },
+      { label: 'الصلاحية', align: 'center', render: (r) => r.role === 'admin' ? '<span class="badge brand">أدمن</span>' : '<span class="badge muted">موظف</span>' },
+      { label: 'سعر الساعة', align: 'center', render: (r) => '<b>' + money(r.hourly_rate_cents) + '</b><div class="tiny muted">' + (r.hourly_rate_cents ? num(r.hourly_rate_cents * 8 / 100) + ' / يوم (8 س)' : '—') + '</div>' },
+      { label: 'حضور الشهر', align: 'center', render: (r) => r.days_present + ' يوم · ' + num(r.worked_hours) + ' ساعة' },
+      { label: 'صافي الشهر', align: 'center', render: (r) => '<b>' + money(r.net) + '</b>' },
+      { label: 'الحالة', align: 'center', render: (r) => '<span class="badge ' + (r.status === 'active' ? 'ok' : 'warn') + '">' + (r.status === 'active' ? 'نشط' : 'موقوف') + '</span>' },
+      { label: 'أجهزة', align: 'center', render: (r) => r.devices },
+      { label: 'آخر دخول', render: (r) => r.last_login_at ? '<span class="small">' + dateTimeStr(r.last_login_at) + '</span>' : '<span class="small muted">لم يدخل بعد</span>' },
+      { label: '', align: 'center', render: (r) => '<div class="row-actions"><button class="btn sm" data-a="rate" data-i="' + r.id + '">💰 السعر</button>' + (r.id === 1 ? '' : '<button class="btn sm" data-a="toggle" data-i="' + r.id + '">' + (r.status === 'active' ? '⏸ إيقاف' : '▶ تفعيل') + '</button>') + '<button class="btn sm" data-a="edit" data-i="' + r.id + '">✏️ تعديل</button>' + (r.role === 'admin' ? '' : '<button class="btn sm danger" data-a="del" data-i="' + r.id + '">🗑</button>') + '</div>' }
+    ], rows, { emptyText: 'لا موظفين', footer: '<span class="small muted">أنت أدمن: كل الحقول قابلة للتعديل بلا قيود (سعر الساعة، الحالة، كلمة المرور، الحقول المخصصة). الموظف العادي لا يرى إلا بياناته.</span>' });
+    host.appendChild(card('👥 القائمة (' + rows.length + ')', tt));
+    Array.prototype.forEach.call(tt.querySelectorAll('[data-a]'), (b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.i);
+        const u = DB.users.find((x) => x.id === id);
+        if (!u) return;
+        if (b.dataset.a === 'edit') return empForm(u);
+        if (b.dataset.a === 'rate') return quickRate(u);
+        if (b.dataset.a === 'toggle') {
+          u.status = u.status === 'active' ? 'suspended' : 'active';
+          save(); toast('تم تغيير حالة ' + esc(u.full_name) + ' إلى ' + (u.status === 'active' ? 'نشط' : 'موقوف'), 'ok'); go('employees');
+        }
+        if (b.dataset.a === 'del') {
+          const n = DB.attendance.filter((a) => a.user_id === id).length;
+          if (!(await confirmBox('سيُحذف ' + u.full_name + ' مع ' + n + ' سجل حضور وكل أجهزته وبنوده. لا يمكن التراجع.', 'حذف موظف'))) return;
+          DB.users = DB.users.filter((x) => x.id !== id);
+          DB.attendance = DB.attendance.filter((a) => a.user_id !== id);
+          DB.attendanceEvents = DB.attendanceEvents.filter((a) => a.user_id !== id);
+          DB.devices = DB.devices.filter((d) => d.user_id !== id);
+          DB.adjustments = DB.adjustments.filter((d) => d.user_id !== id);
+          DB.expenses.forEach((e) => { if (e.user_id === id) e.user_id = null; });
+          notifyAudience('admin', { type: 'user_deleted', title: 'حذف موظف', message: 'تم حذف ' + u.full_name + ' (@' + u.username + ') بواسطة ' + SESSION.user.full_name, severity: 'warning' });
+          save(); toast('تم حذف الموظف', 'ok'); go('employees');
+        }
+      };
+    });
+  };
+
+  RENDER.attendance = (host) => {
+    const t = todayStr();
+    const st = { from: t.slice(0, 8) + '01', to: t, userId: '', status: '' };
+    const statsHost = h('div'), listHost = h('div'), matrixHost = h('div'), rejHost = h('div');
+
+    const filtered = () => DB.attendance.filter((a) => a.work_date >= st.from && a.work_date <= st.to
+      && (!st.userId || a.user_id === +st.userId) && (!st.status || a.status === st.status))
+      .sort((a, b) => (a.work_date < b.work_date ? 1 : -1));
+
+    function drawMatrix(month) {
+      month = month || monthStr(t);
+      const range = rangeFor('monthly', { month });
+      const daysInMonth = new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7), 0)).getUTCDate();
+      const offDays = String(DB.settings.off_days || '5').split(',').map((x) => +x.trim());
+      const emps = DB.users.filter((u) => u.role === 'employee');
+      let html = '<div class="matrix"><table><thead><tr><th class="name">الموظف</th>';
+      for (let d = 1; d <= daysInMonth; d++) html += '<th title="' + month + '-' + pad(d) + ' ' + dayName(month + '-' + pad(d)) + '">' + d + '</th>';
+      html += '<th>ساعات</th><th>تأخير</th><th>حضور</th></tr></thead><tbody>';
+      emps.forEach((u) => {
+        const rs = DB.attendance.filter((a) => a.user_id === u.id && a.work_date >= range.from && a.work_date <= range.to);
+        let hours = 0, late = 0, present = 0;
+        html += '<tr><td class="name"><b>' + esc(u.full_name) + '</b><div class="tiny muted">' + esc(u.job_title || '') + '</div></td>';
+        for (let d = 1; d <= daysInMonth; d++) {
+          const ds = month + '-' + pad(d);
+          const wd = new Date(ds + 'T00:00:00Z').getUTCDay();
+          const r = rs.find((x) => x.work_date === ds);
+          if (r) {
+            const c = evaluate(r);
+            hours += c.workedHours; late += c.lateMinutes; if (c.status === 'present' || c.status === 'late') present++;
+            html += '<td title="' + num(c.workedHours) + ' ساعة · دخول ' + timeStr(r.check_in_at) + ' · ' + money(c.grossPayCents) + '"><span class="m-cell ' + (c.lateMinutes ? 'm-late' : 'm-present') + '">' + (c.lateMinutes ? 'L' : '✓') + '</span></td>';
+          } else if (offDays.indexOf(wd) !== -1) html += '<td><span class="m-cell m-off">ع</span></td>';
+          else if (ds <= range.to && ds <= t) html += '<td><span class="m-cell m-absent">✗</span></td>';
+          else html += '<td><span class="m-cell"></span></td>';
+        }
+        html += '<td><b>' + num(hours) + '</b></td><td>' + (late ? minutesStr(late) : '—') + '</td><td>' + present + '</td></tr>';
+      });
+      html += '</tbody></table><div class="map-legend mt8"><span><i style="background:#e7f6ee"></i>حاضر</span><span><i style="background:#fdf3e0"></i>متأخر</span><span><i style="background:#fdeceb"></i>غائب</span><span><i style="background:#eef0f4"></i>عطلة</span><span class="muted">مرّر الماوس على الخلية للتفاصيل</span></div></div>';
+      matrixHost.innerHTML = html;
+    }
+    function exportMatrix(month) {
+      const range = rangeFor('monthly', { month: month || monthStr(t) });
+      const out = [];
+      DB.users.filter((u) => u.role === 'employee').forEach((u) => {
+        DB.attendance.filter((a) => a.user_id === u.id && a.work_date >= range.from && a.work_date <= range.to).forEach((a) => {
+          const c = evaluate(a);
+          out.push({ f: u.full_name, d: a.work_date, i: a.check_in_at ? timeStr(a.check_in_at) : '', o: a.check_out_at ? timeStr(a.check_out_at) : '', h: c.workedHours, l: c.lateMinutes, s: c.status, g: (c.grossPayCents / 100).toFixed(2) });
+        });
+      });
+      csv('attendance-matrix-' + (month || monthStr(t)) + '.csv', ['الموظف', 'اليوم', 'دخول', 'خروج', 'ساعات', 'تأخير', 'الحالة', 'أجر'], ['f', 'd', 'i', 'o', 'h', 'l', 's', 'g'], out);
+    }
+    function exportAtt() {
+      csv('attendance.csv', ['الموظف', 'اليوم', 'دخول', 'خروج', 'ساعات', 'تأخير', 'أجر', 'مصدر الدخول', 'ملاحظة'],
+        ['f', 'd', 'i', 'o', 'h', 'l', 'g', 'src', 'n'],
+        filtered().map((r) => {
+          const c = evaluate(r), u = DB.users.find((x) => x.id === r.user_id) || {};
+          return { f: u.full_name, d: r.work_date, i: r.check_in_at ? timeStr(r.check_in_at) : '', o: r.check_out_at ? timeStr(r.check_out_at) : '', h: c.workedHours, l: c.lateMinutes, g: (c.grossPayCents / 100).toFixed(2), src: r.check_in_source || '', n: r.note || '' };
+        }));
+    }
+    function editRecord(r) {
+      if (!r) return;
+      const inI = h('input', { type: 'time', value: r.check_in_at ? timeStr(r.check_in_at) : '' });
+      const outI = h('input', { type: 'time', value: r.check_out_at ? timeStr(r.check_out_at) : '' });
+      const brI = h('input', { type: 'number', min: 0, max: 600, value: r.break_minutes || 0 });
+      const noteI = h('textarea', { rows: 2 }); noteI.value = r.note || '';
+      const prev = h('div', { class: 'small muted' });
+      const toMin = (v) => { const a = String(v).split(':'); return (+a[0]) * 60 + (+a[1] || 0); };
+      const calc = () => {
+        if (!inI.value || !outI.value) { prev.textContent = 'أدخل الوقتين لمعاينة الساعات.'; return; }
+        const mm = Math.max(0, toMin(outI.value) - toMin(inI.value) - (+brI.value || 0));
+        const rate = (DB.users.find((u) => u.id === r.user_id) || {}).hourly_rate_cents || 0;
+        prev.innerHTML = 'معاينة: <b>' + num(mm / 60) + '</b> ساعة · أجر اليوم <b>' + money(Math.round(mm / 60 * rate)) + '</b>';
+      };
+      [inI, outI, brI].forEach((i) => i.addEventListener('input', calc)); calc();
+      const saveBtn = h('button', { class: 'btn primary', text: 'حفظ التعديل' });
+      const mm = modal({
+        title: '✏️ تعديل سجل — ' + esc((DB.users.find((u) => u.id === r.user_id) || {}).full_name || '') + ' · ' + dmy(r.work_date),
+        width: '540px',
+        body: h('div', { class: 'grid c2' }, [
+          h('label', { class: 'field' }, [h('span', { text: 'وقت الحضور' }), inI]),
+          h('label', { class: 'field' }, [h('span', { text: 'وقت الانصراف' }), outI]),
+          h('label', { class: 'field' }, [h('span', { text: 'الراحة (دقيقة)' }), brI]),
+          h('label', { class: 'field' }, [h('span', { text: 'ملاحظة' }), noteI]), prev
+        ]),
+        footer: [h('button', { class: 'btn', text: 'إلغاء', onclick: () => mm.close() }), saveBtn]
+      });
+      saveBtn.onclick = () => {
+        const mk = (v) => v ? isoLocal(r.work_date, +v.split(':')[0], +v.split(':')[1]) : null;
+        r.check_in_at = inI.value ? mk(inI.value) : null;
+        r.check_out_at = outI.value ? mk(outI.value) : null;
+        r.break_minutes = +brI.value || 0;
+        r.note = noteI.value.trim() || null;
+        r.check_in_source = r.check_in_at ? 'admin' : null;
+        r.check_out_source = r.check_out_at ? 'admin' : null;
+        r.updated_at = new Date().toISOString(); r.updated_by = SESSION.user.id;
+        const c = evaluate(r);
+        Object.assign(r, { worked_minutes: c.workedMinutes, late_minutes: c.lateMinutes, status: c.status, is_open: r.check_out_at ? 0 : 1 });
+        save(); toast('تم الحفظ — ' + num(c.workedHours) + ' ساعة · ' + money(c.grossPayCents), 'ok'); mm.close(); draw();
+      };
+    }
+    function manualPunch() {
+      if (+DB.settings.allow_admin_punch !== 1) return toast('التسجيل اليدوي معطّل من الإعدادات (allow_admin_punch = 0)', 'bad');
+      const sel2 = h('select'); sel2.innerHTML = DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join('');
+      const act = h('select'); act.innerHTML = '<option value="check_in">تسجيل حضور</option><option value="check_out">تسجيل انصراف</option>';
+      const dt = h('input', { type: 'date', value: todayStr() });
+      const note = h('input', { placeholder: 'السبب (يظهر في السجل)' });
+      const goBtn = h('button', { class: 'btn primary', text: 'تنفيذ' });
+      const mm = modal({
+        title: '➕ تسجيل يدوي نيابة عن موظف', width: '540px',
+        body: h('div', { class: 'grid c2' }, [
+          h('label', { class: 'field' }, [h('span', { text: 'الموظف' }), sel2]),
+          h('label', { class: 'field' }, [h('span', { text: 'الإجراء' }), act]),
+          h('label', { class: 'field' }, [h('span', { text: 'التاريخ' }), dt]),
+          h('label', { class: 'field' }, [h('span', { text: 'ملاحظة' }), note]),
+          h('div', { class: 'alert info small', style: 'grid-column:1/-1', text: 'يتجاوز فحص الـ GPS (بدون إحداثيات)، ويُعلَّم المصدر admin مع تسجيل المنفّذ في updated_by.' })
+        ]),
+        footer: [h('button', { class: 'btn', text: 'إلغاء', onclick: () => mm.close() }), goBtn]
+      });
+      goBtn.onclick = () => {
+        const u = DB.users.find((x) => String(x.id) === sel2.value);
+        if (!u) return toast('اختر موظفًا', 'warn');
+        const a = act.value, d = dt.value;
+        let row = DB.attendance.find((x) => x.user_id === u.id && x.work_date === d);
+        const stamp = new Date().toISOString();
+        if (!row) { row = { id: DB.attendance.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, user_id: u.id, work_date: d, break_minutes: +DB.settings.break_minutes, created_at: stamp }; DB.attendance.push(row); }
+        if (a === 'check_in') {
+          if (row.check_in_at) return toast(MESSAGES.already_in, 'warn');
+          row.check_in_at = stamp; row.check_in_source = 'admin'; row.check_in_lat = null; row.check_in_lng = null; row.check_in_dist = null;
+        } else {
+          if (!row.check_in_at) return toast(MESSAGES.no_check_in, 'warn');
+          if (row.check_out_at) return toast(MESSAGES.already_out, 'warn');
+          row.check_out_at = stamp; row.check_out_source = 'admin';
+        }
+        row.note = note.value.trim() || ('تسجيل يدوي بواسطة ' + SESSION.user.full_name);
+        row.updated_at = stamp; row.updated_by = SESSION.user.id;
+        const c = evaluate(row);
+        Object.assign(row, { worked_minutes: c.workedMinutes, late_minutes: c.lateMinutes, status: c.status, is_open: row.check_out_at ? 0 : 1 });
+        pushEvent({ user_id: u.id, action: a, occurred_at: stamp, lat: null, lng: null, accuracy: null, distance: null, allowed: 1, reason: 'manual', note: row.note });
+        save(); toast('تم التسجيل في سجل ' + esc(u.full_name) + ' ✓', 'ok'); mm.close(); draw();
+      };
+    }
+    function draw() {
+      const rs = filtered();
+      let mins = 0, gross = 0, late = 0;
+      rs.forEach((r) => { const c = evaluate(r); mins += c.workedMinutes; gross += c.grossPayCents; late += c.lateMinutes; });
+      statsHost.innerHTML = '';
+      statsHost.appendChild(statsRow([
+        { k: '📅 السجلات', v: rs.length, s: dmy(st.from) + ' ← ' + dmy(st.to) },
+        { k: '⏱ إجمالي الساعات', v: num(mins / 60) },
+        { k: '💰 أجر الفترة', v: money(gross), cls: 'brand' },
+        { k: '🚩 دقائق تأخير', v: minutesStr(late), cls: late ? 'warn' : 'ok' }
+      ]));
+      listHost.innerHTML = '';
+      const t2 = table([
+        { label: 'الموظف', render: (r) => { const u = DB.users.find((x) => x.id === r.user_id) || {}; return '<b>' + esc(u.full_name || '—') + '</b><div class="small muted">' + esc(u.job_title || '') + '</div>'; } },
+        { label: 'التاريخ', render: (r) => '<b>' + dmy(r.work_date) + '</b><div class="small muted">' + dayName(r.work_date) + '</div>' },
+        { label: 'دخول', align: 'center', render: (r) => r.check_in_at ? '<b class="mono">' + timeStr(r.check_in_at) + '</b><div class="small muted">' + (r.check_in_source === 'admin' ? 'يدوي' : 'GPS') + (r.check_in_dist != null ? ' · ' + Math.round(r.check_in_dist) + 'م' : '') + '</div>' : '<span class="badge bad">بدون دخول</span>' },
+        { label: 'خروج', align: 'center', render: (r) => r.check_out_at ? '<b class="mono">' + timeStr(r.check_out_at) + '</b>' : (r.check_in_at ? '<span class="badge warn">مفتوح</span>' : '—') },
+        { label: 'ساعات', align: 'center', render: (r) => '<b>' + num(evaluate(r).workedHours) + '</b>' },
+        { label: 'تأخير', align: 'center', render: (r) => evaluate(r).lateMinutes ? '<span class="badge warn">' + minutesStr(evaluate(r).lateMinutes) + '</span>' : '—' },
+        { label: 'الحالة', align: 'center', render: (r) => statusBadge(evaluate(r).status) },
+        { label: 'أجر اليوم', align: 'center', render: (r) => '<b>' + money(evaluate(r).grossPayCents) + '</b>' },
+        { label: '', align: 'center', render: (r) => '<div class="row-actions"><button class="btn sm" data-e="' + r.id + '">✏️</button><button class="btn sm danger" data-d="' + r.id + '">🗑</button></div>' }
+      ], rs, { emptyText: 'لا توجد سجلات في هذه الفترة', footer: '<span class="small muted">اضغط ✏️ لتعديل الأوقات يدويًا — تُعاد حسابات الساعات والأجر فورًا.</span>' });
+      listHost.appendChild(t2);
+      Array.prototype.forEach.call(t2.querySelectorAll('[data-e]'), (b) => { b.onclick = () => editRecord(DB.attendance.find((x) => String(x.id) === b.dataset.e)); });
+      Array.prototype.forEach.call(t2.querySelectorAll('[data-d]'), (b) => {
+        b.onclick = async () => {
+          if (!(await confirmBox('حذف سجل هذا اليوم نهائيًا؟', 'حذف سجل'))) return;
+          DB.attendance = DB.attendance.filter((x) => String(x.id) !== b.dataset.d);
+          save(); toast('تم حذف السجل', 'ok'); draw();
+        };
+      });
+      rejHost.innerHTML = '';
+      rejHost.appendChild(table([
+        { label: 'الموظف', render: (e) => esc((DB.users.find((u) => u.id === e.user_id) || {}).full_name || '—') },
+        { label: 'الإجراء', align: 'center', render: (e) => (e.action === 'check_in' ? 'حضور' : e.action === 'check_out' ? 'انصراف' : esc(e.action)) },
+        { label: 'الوقت', render: (e) => '<span class="small mono">' + dateTimeStr(e.occurred_at) + '</span>' },
+        { label: 'المسافة', align: 'center', render: (e) => (e.distance != null ? Math.round(e.distance) + ' م' : '—') },
+        { label: 'الدقة', align: 'center', render: (e) => (e.accuracy != null ? '±' + Math.round(e.accuracy) + ' م' : '—') },
+        { label: 'السبب', align: 'center', render: (e) => '<span class="badge bad">' + esc(reasonText(e.reason)) + '</span>' }
+      ], DB.attendanceEvents.filter((e) => !e.allowed).slice(-10).reverse(), { compact: true, emptyText: 'لا توجد محاولات مرفوضة ✓' }));
+      drawMatrix(monthInput.value);
+    }
+
+    host.appendChild(pageHead('متابعة الحضور والانصراف', [
+      h('button', { class: 'btn sm', text: 'اليوم', onclick: () => { st.from = st.to = t; from.value = t; to.value = t; draw(); } }),
+      h('button', { class: 'btn sm', text: 'أسبوع', onclick: () => { st.from = new Date(Date.parse(t + 'T00:00:00Z') - 6 * 864e5).toISOString().slice(0, 10); st.to = t; from.value = st.from; to.value = t; draw(); } }),
+      h('button', { class: 'btn sm', text: 'الشهر', onclick: () => { st.from = t.slice(0, 8) + '01'; st.to = t; from.value = st.from; to.value = t; draw(); } }),
+      h('button', { class: 'btn', text: '➕ تسجيل يدوي', onclick: manualPunch }),
+      h('button', { class: 'btn', text: '⬇ CSV', onclick: exportAtt })
+    ]));
+    const from = h('input', { type: 'date', value: st.from });
+    const to = h('input', { type: 'date', value: st.to });
+    const sel = h('select');
+    sel.innerHTML = '<option value="">كل الموظفين</option>' + DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join('');
+    const ss = h('select');
+    ss.innerHTML = '<option value="">كل الحالات</option><option value="present">حاضر</option><option value="late">متأخر</option>';
+    from.onchange = to.onchange = () => { st.from = from.value; st.to = to.value; draw(); };
+    sel.onchange = () => { st.userId = sel.value; draw(); };
+    ss.onchange = () => { st.status = ss.value; draw(); };
+    const monthInput = h('input', { type: 'month', value: monthStr(t) });
+    monthInput.onchange = () => drawMatrix(monthInput.value);
+    host.appendChild(card('🔎 الفلاتر والإجماليات', h('div', {}, [
+      h('div', { class: 'filters' }, [
+        h('label', { class: 'field' }, [h('span', { text: 'من' }), from]), h('label', { class: 'field' }, [h('span', { text: 'إلى' }), to]),
+        h('label', { class: 'field' }, [h('span', { text: 'الموظف' }), sel]), h('label', { class: 'field' }, [h('span', { text: 'الحالة' }), ss])
+      ]), statsHost, listHost
+    ])));
+    host.appendChild(card('📊 مصفوفة الحضور الشهرية', h('div', {}, [
+      h('div', { class: 'filters' }, [
+        h('label', { class: 'field', style: 'max-width:190px' }, [h('span', { text: 'الشهر' }), monthInput]),
+        h('button', { class: 'btn sm primary', text: 'عرض المصفوفة', onclick: () => drawMatrix(monthInput.value) }),
+        h('button', { class: 'btn sm', text: '⬇ CSV', onclick: () => exportMatrix(monthInput.value) })
+      ]), matrixHost
+    ])));
+    host.appendChild(card('🚫 المحاولات المرفوضة (خارج النطاق / GPS ضعيف / جهاز غير معتاد)', rejHost));
+    draw();
+  };
+
+  RENDER.payroll = (host) => {
+    const t = todayStr();
+    let mode = 'monthly';
+    const st = { month: monthStr(t), weekOf: t, from: t.slice(0, 8) + '01', to: t, userId: '' };
+    const statsHost = h('div'), listHost = h('div'), adjHost = h('div');
+    const monthI = h('input', { type: 'month', value: st.month });
+    const weekI = h('input', { type: 'date', value: t });
+    const fromI = h('input', { type: 'date', value: st.from });
+    const toI = h('input', { type: 'date', value: st.to });
+    const empI = h('select');
+    empI.innerHTML = '<option value="">— كل الموظفين —</option>' + DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join('');
+    const labs = {
+      monthly: h('label', { class: 'field' }, [h('span', { text: 'الشهر' }), monthI]),
+      weekly: h('label', { class: 'field' }, [h('span', { text: 'أسبوع يوم' }), weekI]),
+      from: h('label', { class: 'field' }, [h('span', { text: 'من' }), fromI]),
+      to: h('label', { class: 'field' }, [h('span', { text: 'إلى' }), toI])
+    };
+    const TABS = [['monthly', 'شهري'], ['weekly', 'أسبوعي'], ['custom', 'مخصص']];
+    const tabs = h('div', { class: 'tabs' });
+    TABS.forEach((tp, i) => tabs.appendChild(h('button', {
+      class: i === 0 ? 'active' : '', text: tp[1],
+      onclick: () => {
+        mode = tp[0];
+        Array.prototype.forEach.call(tabs.children, (b, j) => b.classList.toggle('active', TABS[j][0] === mode));
+        labs.monthly.style.display = mode === 'monthly' ? '' : 'none';
+        labs.weekly.style.display = mode === 'weekly' ? '' : 'none';
+        labs.from.style.display = labs.to.style.display = mode === 'custom' ? '' : 'none';
+        draw();
+      }
+    })));
+    [monthI, weekI, fromI, toI, empI].forEach((i) => {
+      i.onchange = () => { st.month = monthI.value; st.weekOf = weekI.value; st.from = fromI.value; st.to = toI.value; st.userId = empI.value; draw(); };
+    });
+
+    const adjU = h('select'); adjU.innerHTML = DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join('');
+    const adjT = h('select'); adjT.innerHTML = '<option value="bonus">مكافأة (+)</option><option value="allowance">بدل (+)</option><option value="deduction">خصم (−)</option>';
+    const adjA = h('input', { type: 'number', step: '0.01', min: '0.01', placeholder: '0.00' });
+    const adjR = h('input', { placeholder: 'السبب' });
+    const adjForm = h('form', { class: 'filters', style: 'padding:0 0 6px' }, [
+      h('label', { class: 'field' }, [h('span', { text: 'الموظف' }), adjU]), h('label', { class: 'field' }, [h('span', { text: 'النوع' }), adjT]),
+      h('label', { class: 'field' }, [h('span', { text: 'المبلغ' }), adjA]), h('label', { class: 'field' }, [h('span', { text: 'البيان' }), adjR]),
+      h('button', { class: 'btn primary sm', type: 'submit', text: '➕ إضافة' })
+    ]);
+    adjForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!(+adjA.value > 0) || !adjR.value.trim()) return toast('أدخل مبلغًا صحيحًا وبيانًا', 'warn');
+      DB.adjustments.push({ id: Date.now(), user_id: +adjU.value, type: adjT.value, amount_cents: Math.round(+adjA.value * 100), reason: adjR.value.trim(), month: st.month || monthStr(t), created_at: new Date().toISOString(), created_by: SESSION.user.id });
+      save(); toast('تمت الإضافة — أُعيد حساب الصافي ✓', 'ok'); adjA.value = ''; adjR.value = ''; draw();
+    });
+
+    function drawAdj() {
+      const rows = DB.adjustments.filter((a) => a.month === (st.month || monthStr(t)));
+      adjHost.innerHTML = '';
+      const t3 = table([
+        { label: 'الموظف', render: (a) => esc((DB.users.find((u) => u.id === a.user_id) || {}).full_name || '—') },
+        { label: 'النوع', align: 'center', render: (a) => '<span class="badge ' + (a.type === 'deduction' ? 'bad' : 'ok') + '">' + (a.type === 'deduction' ? 'خصم' : a.type === 'bonus' ? 'مكافأة' : 'بدل') + '</span>' },
+        { label: 'البيان', render: (a) => esc(a.reason || '') },
+        { label: 'المبلغ', align: 'center', render: (a) => '<b>' + money(a.amount_cents) + '</b>' },
+        { label: '', align: 'center', render: (a) => '<button class="btn sm danger" data-ad="' + a.id + '">🗑</button>' }
+      ], rows, { compact: true, emptyText: 'لا بنود لشهر ' + esc(monthLabel(st.month || monthStr(t))) });
+      adjHost.appendChild(t3);
+      Array.prototype.forEach.call(t3.querySelectorAll('[data-ad]'), (b) => {
+        b.onclick = () => {
+          DB.adjustments = DB.adjustments.filter((x) => String(x.id) !== b.dataset.ad);
+          save(); toast('تم حذف البند', 'ok'); draw();
+        };
+      });
+    }
+    function draw() {
+      const emps = st.userId ? DB.users.filter((u) => String(u.id) === st.userId) : DB.users.filter((u) => u.role === 'employee');
+      const list = emps.map((u) => ({ u: u, p: payrollFor(u.id, mode, st) }));
+      const tot = list.reduce((a, x) => ({
+        workedHours: a.workedHours + x.p.totals.workedHours, grossPayCents: a.grossPayCents + x.p.totals.grossPayCents,
+        netPayCents: a.netPayCents + x.p.totals.netPayCents, bonusCents: a.bonusCents + x.p.totals.bonusCents + x.p.totals.allowanceCents,
+        deductionCents: a.deductionCents + x.p.totals.deductionCents, lateMinutes: a.lateMinutes + x.p.totals.lateMinutes, absentDays: a.absentDays + x.p.totals.absentDays
+      }), { workedHours: 0, grossPayCents: 0, netPayCents: 0, bonusCents: 0, deductionCents: 0, lateMinutes: 0, absentDays: 0 });
+      const range = (list[0] && list[0].p.range) || rangeFor(mode, st);
+      statsHost.innerHTML = '';
+      statsHost.appendChild(statsRow([
+        { k: '👥 في الكشف', v: list.length, s: range.from + ' ← ' + range.to + ' · ' + (range.label || '') },
+        { k: '⏱ الساعات', v: num(tot.workedHours) }, { k: '💰 الأساسي', v: money(tot.grossPayCents) },
+        { k: '💵 الصافي', v: money(tot.netPayCents), cls: 'brand' }, { k: '🎁 بدلات ومكافآت', v: money(tot.bonusCents) },
+        { k: '➖ خصومات', v: money(tot.deductionCents), cls: tot.deductionCents ? 'warn' : '' },
+        { k: '🚩 تأخير', v: minutesStr(tot.lateMinutes) }, { k: '📅 غياب', v: tot.absentDays, cls: tot.absentDays ? 'bad' : 'ok' }
+      ]));
+      listHost.innerHTML = '';
+      const tt = table([
+        { label: 'الموظف', render: (x) => '<b>' + esc(x.u.full_name) + '</b><div class="small muted">' + esc(x.u.job_title || '') + '</div>' },
+        { label: 'سعر الساعة', align: 'center', render: (x) => money(x.p.totals.hourlyRateCents) },
+        { label: 'أيام', align: 'center', render: (x) => x.p.totals.presentDays + ' / ' + x.p.totals.expectedDays },
+        { label: 'ساعات', align: 'center', render: (x) => '<b>' + num(x.p.totals.workedHours) + '</b>' },
+        { label: 'أوفر تايم', align: 'center', render: (x) => (x.p.totals.overtimeHours ? num(x.p.totals.overtimeHours) : '—') },
+        { label: 'تأخير', align: 'center', render: (x) => (x.p.totals.lateMinutes ? '<span class="badge warn">' + minutesStr(x.p.totals.lateMinutes) + '</span>' : '—') },
+        { label: 'أساسي', align: 'center', render: (x) => money(x.p.totals.grossPayCents) },
+        { label: 'بدلات', align: 'center', render: (x) => money(x.p.totals.bonusCents + x.p.totals.allowanceCents) },
+        { label: 'خصومات', align: 'center', render: (x) => (x.p.totals.deductionCents ? '<span class="badge bad">' + money(x.p.totals.deductionCents) + '</span>' : '—') },
+        { label: 'الصافي', align: 'center', render: (x) => '<b style="color:var(--ok)">' + money(x.p.totals.netPayCents) + '</b>' },
+        { label: '', align: 'center', render: (x) => '<button class="btn sm" data-p="' + x.u.id + '">🔍 الأيام</button>' }
+      ], list, { emptyText: 'لا موظفين', footer: '<b>إجمالي الصافي: ' + money(tot.netPayCents) + '</b>' });
+      listHost.appendChild(tt);
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-p]'), (b) => {
+        b.onclick = () => {
+          const x = list.find((y) => String(y.u.id) === b.dataset.p);
+          if (!x) return;
+          modal({
+            title: '🔍 ' + esc(x.u.full_name) + ' — ' + esc(x.p.range.label || '') + ' (' + x.p.range.from + ' ← ' + x.p.range.to + ')',
+            width: '760px',
+            body: h('div', {}, [
+              h('div', { class: 'kv', style: 'padding:0 0 8px', html: '<dt>سعر الساعة</dt><dd>' + money(x.p.totals.hourlyRateCents) + '</dd><dt>الساعات</dt><dd>' + num(x.p.totals.workedHours) + '</dd><dt>الأساسي</dt><dd>' + money(x.p.totals.grossPayCents) + '</dd><dt>الصافي</dt><dd><b>' + money(x.p.totals.netPayCents) + '</b></dd>' }),
+              table([
+                { label: 'اليوم', render: (d) => dmy(d.workDate) + ' <span class="tiny muted">' + dayName(d.workDate) + '</span>' },
+                { label: 'دخول', align: 'center', render: (d) => '<span class="mono">' + (d.checkInAt ? timeStr(d.checkInAt) : '—') + '</span>' },
+                { label: 'خروج', align: 'center', render: (d) => '<span class="mono">' + (d.checkOutAt ? timeStr(d.checkOutAt) : 'مفتوح') + '</span>' },
+                { label: 'المسافة', align: 'center', render: (d) => (d.inDist != null ? Math.round(d.inDist) + 'م' : (d.inSource === 'admin' ? 'يدوي' : '—')) },
+                { label: 'ساعات', align: 'center', render: (d) => num(d.workedHours) },
+                { label: 'أجر', align: 'center', render: (d) => money(d.dayGrossCents) },
+                { label: 'الحالة', align: 'center', render: (d) => statusBadge(d.status) }
+              ], x.p.days.slice().reverse(), { compact: true, emptyText: 'لا أيام في الفترة' })
+            ])
+          });
+        };
+      });
+      drawAdj();
+    }
+    function exportPayroll() {
+      const rows = DB.users.filter((u) => u.role === 'employee').map((u) => {
+        const p = payrollFor(u.id, mode, st);
+        return {
+          n: u.full_name, r: p.range.from, t: p.range.to, rate: (u.hourly_rate_cents / 100).toFixed(2), h: p.totals.workedHours,
+          g: (p.totals.grossPayCents / 100).toFixed(2), b: ((p.totals.bonusCents + p.totals.allowanceCents) / 100).toFixed(2),
+          d: (p.totals.deductionCents / 100).toFixed(2), net: (p.totals.netPayCents / 100).toFixed(2)
+        };
+      });
+      csv('payroll.csv', ['الموظف', 'من', 'إلى', 'سعر الساعة', 'ساعات', 'أساسي', 'بدلات', 'خصومات', 'صافي'], ['n', 'r', 't', 'rate', 'h', 'g', 'b', 'd', 'net'], rows);
+    }
+
+    host.appendChild(pageHead('كشف الأجور', [
+      h('button', { class: 'btn', text: '⬇ CSV', onclick: exportPayroll }),
+      h('button', { class: 'btn', text: '🖨 طباعة', onclick: () => window.print() })
+    ]));
+    host.appendChild(card('', h('div', {}, [tabs, h('div', { class: 'filters' }, [labs.monthly, labs.weekly, labs.from, labs.to, h('label', { class: 'field' }, [h('span', { text: 'تفاصيل موظف' }), empI])]), statsHost, listHost])));
+    host.appendChild(h('div', { class: 'grid c2', style: 'align-items:start' }, [
+      card('💳 بدلات ومكافآت وخصومات', h('div', {}, [adjForm, adjHost])),
+      card('🧮 كيف يُحسب الأجر؟', h('div', { class: 'pad small', html: '<div class="mono" style="background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px;overflow:auto;direction:ltr;text-align:left">worked = (out − in) − break<br>regular = min(worked, ' + DB.settings.standard_hours_per_day + 'h)<br>overtime = max(0, worked − ' + DB.settings.standard_hours_per_day + 'h) × ' + DB.settings.overtime_multiplier + '<br>gross = (regular + overtime) × hourly_rate<br>late = max(0, in − ' + DB.settings.work_start_time + ' − ' + DB.settings.grace_minutes + 'min)<br>net = gross + bonus + allowance − deduction</div><div class="hint">نفس معادلة <span class="mono">server/services/attendance.js → evaluate()</span> في النسخة الحقيقية.</div>' }))
+    ]));
+    draw();
+  };
+
+  RENDER.expenses = (host) => {
+    const t = todayStr();
+    const st = { from: t.slice(0, 8) + '01', to: t, cat: '', userId: '', q: '' };
+    const CATS = ['صيانة', 'مكتبية', 'بدلات', 'اتصالات', 'تدريب', 'مواصلات', 'ضيافة', 'برمجيات', 'حوافز'];
+    const catOf = () => Array.from(new Set(CATS.concat(DB.expenses.map((e) => e.category).filter(Boolean))));
+    const statsHost = h('div'), listHost = h('div'), byCatHost = h('div'), byMonHost = h('div');
+    const from = h('input', { type: 'date', value: st.from }), to = h('input', { type: 'date', value: st.to });
+    const cat = h('select'), us = h('select'), q = h('input', { placeholder: 'بيان أو مورد…' });
+    const fillSel = () => {
+      cat.innerHTML = '<option value="">كل الفئات</option>' + catOf().map((c) => '<option' + (st.cat === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+      us.innerHTML = '<option value="">الكل</option><option value="none"' + (st.userId === 'none' ? ' selected' : '') + '>عامة فقط</option>' + DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '"' + (st.userId === String(u.id) ? ' selected' : '') + '>' + esc(u.full_name) + '</option>').join('');
+    };
+    const filtered = () => DB.expenses.filter((e) => {
+      if (e.spent_on < st.from || e.spent_on > st.to) return false;
+      if (st.cat && e.category !== st.cat) return false;
+      if (st.userId === 'none' && e.user_id) return false;
+      if (st.userId && st.userId !== 'none' && e.user_id !== +st.userId) return false;
+      if (st.q && (String(e.title || '') + ' ' + String(e.vendor || '')).toLowerCase().indexOf(st.q.toLowerCase()) === -1) return false;
+      return true;
+    }).sort((a, b) => (a.spent_on < b.spent_on ? 1 : -1));
+
+    function form(e) {
+      const isNew = !e;
+      const f = {};
+      const add = (label, id, tag, attrs) => {
+        const i = h(tag || 'input', Object.assign({ id: id }, attrs || {}));
+        if (e && e[id] != null) i.value = id === 'amount' ? (e.amount_cents / 100).toFixed(2) : e[id];
+        f[id] = i;
+        return h('label', { class: 'field' }, [h('span', { html: label }), i]);
+      };
+      const catSel = h('select');
+      catSel.innerHTML = '<option value="">—</option>' + catOf().map((c) => '<option' + (e && e.category === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '<option value="__new">➕ فئة جديدة…</option>';
+      const empSel = h('select');
+      empSel.innerHTML = '<option value="">— عام —</option>' + DB.users.filter((u) => u.role === 'employee').map((u) => '<option value="' + u.id + '"' + (e && e.user_id === u.id ? ' selected' : '') + '>' + esc(u.full_name) + '</option>').join('');
+      const paySel = h('select');
+      paySel.innerHTML = ['', 'نقدي', 'تحويل بنكي', 'محفظة إلكترونية', 'فيزا', 'آجل'].map((v) => '<option value="' + v + '"' + (e && e.payment_method === v ? ' selected' : '') + '>' + (v || '—') + '</option>').join('');
+      const body = h('div', { class: 'grid c2' }, [
+        add('البيان <b class="req">*</b>', 'title', 'input', { required: true, placeholder: 'مثال: صيانة مكيف' }),
+        add('المبلغ (' + DB.settings.currency_symbol + ') <b class="req">*</b>', 'amount', 'input', { type: 'number', step: '0.01', min: '0.01', required: true }),
+        add('التاريخ <b class="req">*</b>', 'spent_on', 'input', { type: 'date', required: true }),
+        h('label', { class: 'field' }, [h('span', { text: 'الفئة' }), catSel]),
+        h('label', { class: 'field' }, [h('span', { text: 'مرتبط بموظف' }), empSel]),
+        h('label', { class: 'field' }, [h('span', { text: 'طريقة الدفع' }), paySel]),
+        add('المورد', 'vendor', 'input', { placeholder: 'اسم المحل/الشركة' }),
+        add('رقم الفاتورة', 'invoice_no', 'input', {}),
+        add('ملاحظة', 'note', 'textarea', { rows: 2 })
+      ]);
+      if (!e) f.spent_on.value = t;
+      const saveBtn = h('button', { class: 'btn primary', text: isNew ? 'تسجيل المصروف' : 'حفظ التعديل' });
+      const mm = modal({
+        title: isNew ? '➕ تسجيل مصروف' : '✏️ تعديل مصروف', width: '740px', body: body,
+        footer: [h('button', { class: 'btn', text: 'إلغاء', onclick: () => mm.close() }), saveBtn]
+      });
+      saveBtn.onclick = () => {
+        const title = f.title.value.trim(), amount = +f.amount.value, spent = f.spent_on.value;
+        if (!title) return toast('اكتب البيان', 'warn');
+        if (!(amount > 0)) return toast('أدخل مبلغًا صحيحًا', 'warn');
+        if (!spent) return toast('اختر التاريخ', 'warn');
+        let c = catSel.value;
+        if (c === '__new') c = (window.prompt('اسم الفئة الجديدة') || '').trim();
+        const data = {
+          title: title, amount_cents: Math.round(amount * 100), spent_on: spent, category: c || null,
+          user_id: empSel.value ? +empSel.value : null, vendor: f.vendor.value.trim() || null,
+          payment_method: paySel.value || null, invoice_no: f.invoice_no.value.trim() || null, note: f.note.value.trim() || null
+        };
+        if (isNew) {
+          data.id = DB.expenses.reduce((mx, x) => Math.max(mx, x.id), 0) + 1;
+          data.created_by = SESSION.user.id; data.created_at = new Date().toISOString();
+          DB.expenses.push(data);
+        } else Object.assign(e, data);
+        if (data.user_id && data.user_id !== SESSION.user.id) {
+          notifyAudience('user', { user_id: data.user_id, type: 'expense', title: 'مصروف مسجَّل باسمك', message: data.title + ' — ' + money(data.amount_cents) + ' بتاريخ ' + data.spent_on });
+        }
+        if (c && CATS.indexOf(c) === -1) CATS.push(c);
+        save(); toast(isNew ? 'تم تسجيل المصروف ✓' : 'تم الحفظ ✓', 'ok'); mm.close(); fillSel(); draw();
+      };
+    }
+    function exportExp() {
+      csv('expenses.csv', ['التاريخ', 'البيان', 'الفئة', 'المبلغ', 'موظف', 'المورد', 'الدفع', 'فاتورة'],
+        ['d', 't', 'c', 'a', 'emp', 'v', 'p', 'i'],
+        filtered().map((e) => ({ d: e.spent_on, t: e.title, c: e.category || '', a: (e.amount_cents / 100).toFixed(2), emp: e.user_id ? ((DB.users.find((u) => u.id === e.user_id) || {}).full_name || '') : 'عام', v: e.vendor || '', p: e.payment_method || '', i: e.invoice_no || '' })));
+    }
+    function bars(arr) {
+      if (!arr.length) return '<div class="empty">لا بيانات</div>';
+      const max = Math.max.apply(null, arr.map((x) => x[1]));
+      return '<ul class="list" style="padding:0">' + arr.map((x) => '<li style="padding:7px 0"><span style="flex:0 0 120px" class="small">' + esc(x[0]) + '</span><span class="meter" style="flex:1"><i style="width:' + Math.round(x[1] / max * 100) + '%"></i></span><b class="nowrap">' + money(x[1]) + '</b><span class="badge muted">' + x[2] + '</span></li>').join('') + '</ul>';
+    }
+    function draw() {
+      const rows = filtered();
+      const total = rows.reduce((s, e) => s + e.amount_cents, 0);
+      const linked = rows.filter((e) => e.user_id).reduce((s, e) => s + e.amount_cents, 0);
+      const big = rows.slice().sort((a, b) => b.amount_cents - a.amount_cents)[0];
+      statsHost.innerHTML = '';
+      statsHost.appendChild(statsRow([
+        { k: '🧾 البنود', v: rows.length, s: dmy(st.from) + ' ← ' + dmy(st.to) },
+        { k: '💸 الإجمالي', v: money(total), cls: 'brand' },
+        { k: '📌 متوسط البند', v: money(rows.length ? Math.round(total / rows.length) : 0) },
+        { k: '👥 مرتبط بموظفين', v: money(linked), s: (total - linked ? 'عام ' + money(total - linked) : 'لا مصروفات عامة') },
+        { k: '⬆ أكبر بند', v: big ? money(big.amount_cents) : '—', s: big ? esc(big.title) : '' },
+        { k: '📅 أيام فيها مصروف', v: new Set(rows.map((e) => e.spent_on)).size }
+      ]));
+      listHost.innerHTML = '';
+      const tt = table([
+        { label: 'التاريخ', render: (e) => '<b>' + dmy(e.spent_on) + '</b><div class="small muted">' + dayName(e.spent_on) + '</div>' },
+        { label: 'البيان', render: (e) => esc(e.title) + (e.note ? '<div class="small muted">' + esc(e.note) + '</div>' : '') },
+        { label: 'الفئة', align: 'center', render: (e) => '<span class="badge muted">' + esc(e.category || '—') + '</span>' },
+        { label: 'المبلغ', align: 'center', render: (e) => '<b>' + money(e.amount_cents) + '</b>' },
+        { label: 'مرتبط بـ', align: 'center', render: (e) => (e.user_id ? esc((DB.users.find((u) => u.id === e.user_id) || {}).full_name || '—') : '<span class="badge">عام</span>') },
+        { label: 'المورد', render: (e) => esc(e.vendor || '—') + (e.invoice_no ? '<div class="small muted">فاتورة ' + esc(e.invoice_no) + '</div>' : '') },
+        { label: 'الدفع', align: 'center', render: (e) => '<span class="small">' + esc(e.payment_method || '—') + '</span>' },
+        { label: 'أُدخل', align: 'center', render: (e) => '<span class="tiny muted">' + esc((DB.users.find((u) => u.id === e.created_by) || {}).full_name || '') + '<br>' + esc(timeAgo(e.created_at)) + '</span>' },
+        { label: '', align: 'center', render: (e) => '<div class="row-actions"><button class="btn sm" data-ee="' + e.id + '">✏️</button><button class="btn sm danger" data-ed="' + e.id + '">🗑</button></div>' }
+      ], rows, { emptyText: 'لا مصروفات في هذه الفترة — سجّل أول مصروف', footer: '<b>الإجمالي: ' + money(total) + '</b>' });
+      listHost.appendChild(tt);
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-ee]'), (b) => { b.onclick = () => form(DB.expenses.find((x) => String(x.id) === b.dataset.ee)); });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-ed]'), (b) => {
+        b.onclick = async () => {
+          if (!(await confirmBox('حذف هذا المصروف نهائيًا؟', 'حذف مصروف'))) return;
+          DB.expenses = DB.expenses.filter((x) => String(x.id) !== b.dataset.ed);
+          save(); toast('تم الحذف', 'ok'); draw();
+        };
+      });
+      const agg = (keyFn) => {
+        const o = {};
+        rows.forEach((e) => { const k = keyFn(e); o[k] = o[k] || [0, 0]; o[k][0] += e.amount_cents; o[k][1]++; });
+        return Object.keys(o).map((k) => [k, o[k][0], o[k][1]]).sort((a, b) => b[1] - a[1]);
+      };
+      byCatHost.innerHTML = bars(agg((e) => e.category || 'متفرقات'));
+      const months = {};
+      rows.forEach((e) => { const k = e.spent_on.slice(0, 7); months[k] = months[k] || [0, 0]; months[k][0] += e.amount_cents; months[k][1]++; });
+      byMonHost.innerHTML = bars(Object.keys(months).sort().map((k) => [monthLabel(k), months[k][0], months[k][1]]));
+    }
+
+    host.appendChild(pageHead('المصروفات', [
+      h('button', { class: 'btn primary', text: '➕ تسجيل مصروف', onclick: () => form() }),
+      h('button', { class: 'btn', text: '⬇ CSV', onclick: exportExp }),
+      h('button', { class: 'btn', text: '🖨 طباعة', onclick: () => window.print() })
+    ]));
+    host.appendChild(card('🔎 الفلاتر والإجماليات', h('div', {}, [
+      h('div', { class: 'filters' }, [
+        h('label', { class: 'field' }, [h('span', { text: 'من' }), from]), h('label', { class: 'field' }, [h('span', { text: 'إلى' }), to]),
+        h('label', { class: 'field' }, [h('span', { text: 'الفئة' }), cat]), h('label', { class: 'field' }, [h('span', { text: 'موظف' }), us]),
+        h('label', { class: 'field' }, [h('span', { text: 'بحث' }), q])
+      ]),
+      h('div', { class: 'inline', style: 'padding:0 16px 8px' }, [
+        h('button', { class: 'btn sm', text: 'هذا الشهر', onclick: () => { st.from = t.slice(0, 8) + '01'; st.to = t; from.value = st.from; to.value = st.to; draw(); } }),
+        h('button', { class: 'btn sm', text: 'هذه السنة', onclick: () => { st.from = t.slice(0, 4) + '-01-01'; st.to = t; from.value = st.from; to.value = st.to; draw(); } }),
+        h('button', { class: 'btn sm ghost', text: 'مسح الفلاتر', onclick: () => { st.cat = ''; st.userId = ''; st.q = ''; q.value = ''; fillSel(); draw(); } })
+      ]),
+      statsHost, listHost
+    ])));
+    host.appendChild(h('div', { class: 'grid c2', style: 'align-items:start' }, [
+      card('📊 حسب الفئة', byCatHost), card('📅 حسب الشهر', byMonHost)
+    ]));
+    fillSel();
+    [from, to].forEach((i) => { i.onchange = () => { st.from = from.value; st.to = to.value; draw(); }; });
+    cat.onchange = () => { st.cat = cat.value; draw(); };
+    us.onchange = () => { st.userId = us.value; draw(); };
+    q.oninput = () => { st.q = q.value.trim(); draw(); };
+    draw();
+  };
+  RENDER.security = (host) => {
+    const statsHost = h('div'), devHost = h('div'), logHost = h('div'), polHost = h('div'), notHost = h('div'), probeHost = h('div');
+    const userSel = h('select');
+    userSel.innerHTML = '<option value="">كل الموظفين</option>' + DB.users.map((u) => '<option value="' + u.id + '">' + esc(u.full_name) + '</option>').join('');
+    const onlyBox = h('input', { type: 'checkbox' });
+    const LOGIN_REASONS = {
+      new_device: ['جهاز غير معتاد', 'warn'], untrusted_device: ['جهاز غير معتمد', 'muted'], usual_device: ['الجهاز المعتاد', 'ok'],
+      first_device_registered: ['أول جهاز — سُجِّل كمعتاد', 'ok'], wrong_password: ['كلمة مرور خاطئة', 'muted'],
+      unknown_user: ['مستخدم غير موجود', 'muted'], disabled_account: ['حساب موقوف', 'muted'], logout: ['تسجيل خروج', 'muted'],
+      password_changed: ['تغيير كلمة مرور', 'muted'], unknown_device: ['جهاز غير معتاد', 'warn']
+    };
+    const loginReason = (r) => {
+      if (!r) return '<span class="muted">—</span>';
+      const v = LOGIN_REASONS[r] || [r, 'muted'];
+      return '<span class="badge ' + v[1] + '">' + esc(v[0]) + '</span>';
+    };
+    function exportLogins() {
+      csv('login-events.csv', ['الوقت', 'المستخدم', 'ناجح؟', 'الجهاز', 'السبب', 'IP'],
+        ['occurred_at', 'username', (r) => (r.success ? 'نعم' : 'لا'), 'device_label', 'reason', 'ip'], DB.loginEvents.slice().reverse());
+    }
+    function exportDevices() {
+      csv('devices.csv', ['الموظف', 'الجهاز', 'متصفح', 'نظام', 'معتاد؟', 'معتمد؟', 'دخولات', 'أول ظهور', 'آخر ظهور', 'البصمة'],
+        ['full_name', 'label', 'browser', 'os', (d) => (d.is_usual ? 'نعم' : 'لا'), (d) => (d.trusted ? 'نعم' : 'لا'), 'login_count', 'first_seen_at', 'last_seen_at', 'hash'],
+        DB.devices.map((d) => Object.assign({}, d, { full_name: (DB.users.find((u) => u.id === d.user_id) || {}).full_name })));
+    }
+    async function probe() {
+      probeHost.innerHTML = '<div class="small muted">جارٍ الحساب…</div>';
+      const fp = await collectFingerprint();
+      const mine = DB.devices.find((d) => d.hash === fp.hash);
+      const uUsual = DB.devices.find((d) => d.user_id === SESSION.user.id && d.is_usual);
+      probeHost.innerHTML = '<div class="kv mt8" style="padding:0"><dt>البصمة</dt><dd class="mono">' + esc(fp.hash) + '</dd>'
+        + '<dt>المتصفح/النظام</dt><dd>' + esc(fp.label) + '</dd>'
+        + '<dt>هذا الجهاز في القاعدة؟</dt><dd>' + (mine ? '<span class="badge ok">مسجَّل ✓ (' + esc(mine.is_usual ? 'معتاد' : 'غير معتمد') + ')</span>' : '<span class="badge warn">غير مسجَّل</span>') + '</dd>'
+        + '<dt>جهازك المعتاد</dt><dd>' + (uUsual ? esc(uUsual.label) : 'لا يوجد بعد') + '</dd></div>'
+        + '<div class="hint">لو ظهرت «غير مسجَّل» فأي تسجيل دخول الآن سيُنشئ جهازًا جديدًا ويُرسل تنبيهًا للأدمن.</div>';
+    }
+    function draw() {
+      const t = todayStr();
+      const logins = DB.loginEvents.slice().reverse();
+      const unusual = DB.loginEvents.filter((l) => l.is_usual === 0 && l.success === 1);
+      statsHost.innerHTML = '';
+      statsHost.appendChild(statsRow([
+        { k: '🔑 دخول ناجح اليوم', v: logins.filter((l) => l.success && dateStr(l.occurred_at) === t).length, cls: 'ok' },
+        { k: '🚫 محاولات فاشلة', v: logins.filter((l) => !l.success).length, cls: logins.some((l) => !l.success) ? 'bad' : 'ok' },
+        { k: '💻 أجهزة مسجّلة', v: DB.devices.length, s: DB.devices.filter((d) => !d.trusted).length + ' غير معتمدة' },
+        { k: '⚠️ دخول من جهاز غير معتاد', v: unusual.length, cls: unusual.length ? 'warn' : 'ok' },
+        { k: '🔔 تنبيهات غير مقروءة', v: DB.notifications.filter((n) => !n.is_read).length, cls: DB.notifications.some((n) => !n.is_read) ? 'warn' : 'ok' }
+      ]));
+      let devs = DB.devices.map((d) => Object.assign({}, d, {
+        full_name: (DB.users.find((u) => u.id === d.user_id) || {}).full_name || '—',
+        username: (DB.users.find((u) => u.id === d.user_id) || {}).username || ''
+      }));
+      if (userSel.value) devs = devs.filter((d) => d.user_id === +userSel.value);
+      if (onlyBox.checked) devs = devs.filter((d) => !d.trusted);
+      devHost.innerHTML = '';
+      const tt = table([
+        { label: 'الموظف', render: (d) => '<b>' + esc(d.full_name) + '</b><div class="small muted">@' + esc(d.username) + '</div>' },
+        { label: 'الحالة', align: 'center', render: (d) => (d.is_usual ? '<span class="badge ok">معتاد</span>' : d.trusted ? '<span class="badge muted">معتمد</span>' : '<span class="badge warn">غير معتمد</span>') },
+        { label: 'الجهاز', render: (d) => esc(d.label || '—') + '<div class="tiny muted mono">' + esc(d.short || '') + ' · ' + esc(d.screen || '') + ' · ' + esc(d.language || '') + '</div>' + (d.notes ? '<div class="tiny muted">' + esc(d.notes) + '</div>' : '') },
+        { label: 'أول ظهور', align: 'center', render: (d) => '<span class="small">' + dateTimeStr(d.first_seen_at) + '</span>' },
+        { label: 'آخر ظهور', align: 'center', render: (d) => '<span class="small">' + dateTimeStr(d.last_seen_at) + '</span><div class="tiny muted">' + esc(timeAgo(d.last_seen_at)) + '</div>' },
+        { label: 'دخولات', align: 'center', render: (d) => d.login_count },
+        { label: '', align: 'center', render: (d) => '<div class="row-actions">' + (d.trusted ? '<button class="btn sm danger" data-un="' + d.id + '">⛔ إلغاء الاعتماد</button>' : '<button class="btn sm primary" data-tr="' + d.id + '">✔️ اعتماد</button>') + (d.is_usual ? '' : '<button class="btn sm" data-us="' + d.id + '">⭐ اجعله المعتاد</button>') + '<button class="btn sm danger" data-dd="' + d.id + '">🗑</button></div>' }
+      ], devs, { compact: true, emptyText: 'لا أجهزة مطابقة — سجّل خروجك وادخل من متصفح/جهاز آخر لترى التنبيه' });
+      devHost.appendChild(tt);
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-tr]'), (b) => {
+        b.onclick = () => { const d = DB.devices.find((x) => x.id === +b.dataset.tr); d.trusted = 1; d.is_usual = 1; d.notes = 'أعتمده الأدمن'; save(); toast('تم اعتماد الجهاز — لن يصل تنبيه لدخوله بعد الآن ✓', 'ok'); draw(); };
+      });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-un]'), (b) => {
+        b.onclick = () => { const d = DB.devices.find((x) => x.id === +b.dataset.un); d.trusted = 0; d.is_usual = 0; d.notes = 'أُلغي اعتماده'; save(); toast('تم إلغاء الاعتماد — دخولاته القادمة ستُنَبِّه الأدمن', 'warn'); draw(); };
+      });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-us]'), (b) => {
+        b.onclick = () => {
+          const d = DB.devices.find((x) => x.id === +b.dataset.us);
+          DB.devices.forEach((y) => { if (y.user_id === d.user_id) y.is_usual = 0; });
+          d.is_usual = 1; d.trusted = 1; save(); toast('أصبح هذا الجهاز هو المعتاد للموظف', 'ok'); draw();
+        };
+      });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-dd]'), (b) => {
+        b.onclick = async () => {
+          if (!(await confirmBox('حذف البصمة؟ سيُعامل الجهاز كجهاز جديد عند أول دخول ويُنَبَّه الأدمن.', 'حذف جهاز'))) return;
+          DB.devices = DB.devices.filter((x) => x.id !== +b.dataset.dd);
+          save(); toast('تم حذف الجهاز من القائمة', 'ok'); draw();
+        };
+      });
+      logHost.innerHTML = '';
+      logHost.appendChild(table([
+        { label: 'الوقت', render: (l) => '<span class="small mono">' + dateTimeStr(l.occurred_at) + '</span>' },
+        { label: 'المستخدم', render: (l) => '<b>' + esc((DB.users.find((u) => u.id === l.user_id) || {}).full_name || l.username || '؟') + '</b><div class="small muted">@' + esc(l.username || '') + '</div>' },
+        { label: 'النتيجة', align: 'center', render: (l) => statusBadge(l.success ? 'success' : 'failed') },
+        { label: 'الجهاز', align: 'center', render: (l) => (l.is_usual === 1 ? '<span class="badge ok">معتاد</span>' : l.is_usual === -1 ? '<span class="badge muted">أول جهاز</span>' : l.is_usual === 0 ? '<span class="badge warn">⚠ جديد</span>' : '<span class="muted">—</span>') },
+        { label: 'السبب', align: 'center', render: (l) => loginReason(l.reason) },
+        { label: 'التفاصيل', render: (l) => '<div class="tiny muted">' + esc(l.device_label || '') + '</div>' }
+      ], logins.slice(0, 40), { compact: true, emptyText: 'لا أحداث' }));
+      const pol = [
+        ['التنبيه عند جهاز غير معتاد', +DB.settings.device_alert_enabled ? 'مُفعّل ✅' : 'موقوف ⛔'],
+        ['إيميل التنبيهات (SMTP)', +DB.settings.email_alerts_enabled ? (DB.settings.alert_email ? 'مُفعّل → ' + DB.settings.alert_email : 'مُفعّل لكن alert_email فارغ!') : 'غير مُفعّل'],
+        ['قصر الحضور على الجهاز المعتاد', +DB.settings.require_usual_device ? 'مُطبَّق ⚠️' : 'غير مطلوب'],
+        ['أقل طول لكلمة المرور', DB.settings.password_min_length + ' محرف'],
+        ['مدة الجلسة', DB.settings.session_ttl_hours + ' ساعة']
+      ];
+      polHost.innerHTML = '<div class="kv" style="padding:0 16px 14px">' + pol.map((r) => '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') + '</div>';
+      const ns = DB.notifications.slice().reverse().slice(0, 10);
+      notHost.innerHTML = '';
+      if (!ns.length) notHost.appendChild(h('div', { class: 'empty', text: 'لا تنبيهات 🎉' }));
+      else {
+        const nn = h('ul', { class: 'list' });
+        ns.forEach((n) => nn.appendChild(h('li', {}, [
+          h('span', { class: 'dot ' + (n.is_read ? '' : n.severity === 'warning' ? 'warn' : 'ok') }),
+          h('div', { style: 'flex:1', html: '<b>' + esc(n.title) + '</b><div class="small muted">' + esc(n.message) + '</div><div class="tiny muted">' + dateTimeStr(n.created_at) + ' · ' + esc(timeAgo(n.created_at)) + '</div>' }),
+          n.is_read ? h('span', { class: 'badge muted', text: 'مقروء' }) : h('button', { class: 'btn sm', text: 'مقروء', onclick: () => { n.is_read = 1; save(); renderNav(); draw(); } })
+        ])));
+        notHost.appendChild(nn);
+      }
+    }
+    host.appendChild(pageHead('الأمان وتتبّع الأجهزة', [
+      h('button', { class: 'btn', text: '⬇ سجل الدخول CSV', onclick: exportLogins }),
+      h('button', { class: 'btn', text: '⬇ الأجهزة CSV', onclick: exportDevices })
+    ]));
+    host.appendChild(h('div', { class: 'alert info', html: '🧠 البصمة = <b>User-Agent</b> + اللغة + المنطقة الزمنية + دقة الشاشة + عدد الأنوية + اللمس + معرّف UUID في المتصفح، مجزّأة إلى <span class="mono">SHA-256</span>. أول جهاز للموظف يُسجَّل «معتادًا»، وأي جهاز مختلف يولّد تنبيهًا فوريًا هنا. في النسخة الحقيقية الحساب في الخادم (<span class="mono">server/services/device.js</span>) والتنبيه يصل عبر SSE + بريد Nodemailer.' }));
+    host.appendChild(statsHost);
+    host.appendChild(card('💻 الأجهزة المعروفة', h('div', {}, [
+      h('div', { class: 'filters' }, [
+        h('label', { class: 'field', style: 'max-width:220px' }, [h('span', { text: 'الموظف' }), userSel]),
+        h('label', { class: 'inline small', style: 'gap:8px' }, [onlyBox, h('span', { text: 'غير المعتمدة فقط' })])
+      ]), devHost
+    ])));
+    host.appendChild(card('🔑 سجل عمليات الدخول (آخر 40)', logHost));
+    host.appendChild(h('div', { class: 'grid c2', style: 'align-items:start' }, [
+      card('⚙️ السياسات السارية', h('div', {}, [polHost, h('div', { class: 'inline mt8' }, [h('button', { class: 'btn sm', text: 'تعديل السياسات', onclick: () => go('settings') })])])),
+      card('🔔 آخر التنبيهات', notHost)
+    ]));
+    host.appendChild(card('🔬 افحص بصمة جهازك الحالي', h('div', { class: 'pad' }, [h('div', { class: 'inline' }, [h('button', { class: 'btn sm primary', text: 'احسب البصمة', onclick: probe })]), probeHost])));
+    userSel.onchange = onlyBox.onchange = draw;
+    draw();
+  };
+
+  RENDER.settings = (host) => {
+    const s = DB.settings;
+    const inputs = {};
+    const mapHost = h('div', { class: 'pad' });
+    const testHost = h('div');
+    const GROUPS = [
+      { id: 'workplace', title: '📍 مكان العمل وحدود GPS', fields: [['workplace_name', 'اسم المكان', 'text'], ['workplace_address', 'العنوان', 'text'], ['workplace_lat', 'خط العرض Latitude <b class="req">*</b>', 'number', { step: '0.000001' }], ['workplace_lng', 'خط الطول Longitude <b class="req">*</b>', 'number', { step: '0.000001' }], ['radius_m', 'نطاق السماح بالمتر <b class="req">*</b>', 'number', { min: 10, max: 20000 }], ['max_accuracy_m', 'أقصى دقة GPS مقبولة (متر)', 'number', { min: 5, max: 1000 }]] },
+      { id: 'policy', title: '⏱️ سياسة الحضور والانصراف', fields: [['work_start_time', 'بداية العمل', 'time'], ['work_end_time', 'نهاية العمل', 'time'], ['standard_hours_per_day', 'ساعات اليوم', 'number', { step: '0.5' }], ['grace_minutes', 'سماح التأخير (دقيقة)', 'number'], ['break_minutes', 'الراحة (دقيقة)', 'number'], ['min_hours_for_break', 'أقل ساعات لخصم الراحة', 'number', { step: '0.5' }], ['rounding_minutes', 'تقريب الدقائق', 'number', { min: 0, max: 60 }], ['allow_check_in_before', 'السماح بالتسجيل قبل البداية (دقيقة)', 'number'], ['off_days', 'أيام العطلة (أرقام بفواصل — 5 = جمعة)', 'text'], ['auto_close_open_shift', 'إغلاق الورديات المفتوحة تلقائيًا', 'bool'], ['allow_admin_punch', 'السماح للأدمن بالتسجيل اليدوي', 'bool'], ['require_usual_device', 'منع التسجيل من جهاز غير معتاد', 'bool']] },
+      { id: 'pay', title: '💰 الأجور والعملة', fields: [['overtime_multiplier', 'معامل الأوفر تايم', 'number', { step: '0.1' }], ['week_start_day', 'بداية الأسبوع (0=أحد، 6=سبت)', 'number'], ['currency_symbol', 'رمز العملة', 'text'], ['currency_code', 'كود العملة', 'text']] },
+      { id: 'security', title: '🛡️ الأمان والإشعارات', fields: [['device_alert_enabled', 'تنبيه عند جهاز غير معتاد', 'bool'], ['email_alerts_enabled', 'إرسال إيميل للأدمن (SMTP في النسخة الحقيقية)', 'bool'], ['alert_email', 'بريد التنبيهات', 'email'], ['password_min_length', 'أقل طول لكلمة المرور', 'number'], ['session_ttl_hours', 'مدة الجلسة (ساعة)', 'number']] },
+      { id: 'appearance', title: '🎨 المظهر', fields: [['app_title', 'عنوان النظام', 'text'], ['logo_text', 'الشعار النصي', 'text'], ['timezone', 'المنطقة الزمنية (IANA)', 'text']] }
+    ];
+    function setDemo(inside) {
+      const wp = { lat: +inputs.workplace_lat.i.value, lng: +inputs.workplace_lng.i.value };
+      const R = +inputs.radius_m.i.value || 150;
+      DEMO_POS = inside ? { lat: wp.lat + 0.0002, lng: wp.lng + 0.0002, accuracy: 12 }
+        : { lat: wp.lat + 0.004, lng: wp.lng + 0.003, accuracy: 18 };
+      drawMap();
+      const d = Math.round(haversineM(DEMO_POS.lat, DEMO_POS.lng, wp.lat, wp.lng));
+      testHost.innerHTML = '<div class="alert ' + (inside ? 'ok' : 'warn') + ' small mt8">موقع تجريبي على بُعد <b>' + d + ' م</b> من المركز ⇒ ' + (inside ? 'التسجيل سيُقبل ✓' : 'التسجيل سيرفض برسالة النطاق') + '. (فعّال في هذه الجلسة حتى تحفظ الإعدادات).</div>';
+      toast('موقع تجريبي ' + (inside ? 'داخل' : 'خارج') + ' النطاق', 'info');
+    }
+    function drawMap() {
+      mapHost.innerHTML = radarSVG(todayMarks().concat(DEMO_POS ? [{ name: 'موقعك', lat: DEMO_POS.lat, lng: DEMO_POS.lng }] : []));
+    }
+    async function useMyLocation() {
+      testHost.innerHTML = '<div class="small muted">جارٍ قراءة موقعك…</div>';
+      try {
+        const p = await locate({ highAccuracy: true, timeoutMs: 15000 });
+        inputs.workplace_lat.i.value = p.lat.toFixed(6);
+        inputs.workplace_lng.i.value = p.lng.toFixed(6);
+        DEMO_POS = p;
+        drawMap();
+        testHost.innerHTML = '<div class="alert ok small mt8">تم قراءة موقعك بدقة ±' + Math.round(p.accuracy || 0) + ' م' + (p.demo ? ' (موقع تجريبي)' : '') + ' — اضغط «💾 حفظ كل التغييرات» لتثبيته كمركز لمكان العمل.</div>';
+      } catch (e) {
+        testHost.innerHTML = '<div class="alert warn small mt8">⚠️ ' + esc(e.message) + '<div class="mt8 small">جرّب زرّي «موقع تجريبي» لتجربة المنطق بدون GPS.</div></div>';
+      }
+    }
+    async function previewRadius() {
+      testHost.innerHTML = '<div class="small muted">جارٍ الحساب…</div>';
+      try {
+        const p = await locate({});
+        const wp = { lat: +inputs.workplace_lat.i.value, lng: +inputs.workplace_lng.i.value };
+        const radius = +inputs.radius_m.i.value;
+        const d = +haversineM(p.lat, p.lng, wp.lat, wp.lng).toFixed(1);
+        testHost.innerHTML = '<div class="alert ' + (d <= radius ? 'ok' : 'warn') + ' small mt8">الموقع الحالي يبعد <b>' + d + ' م</b> عن المركز المُدخل (النطاق ' + radius + ' م) ⇒ '
+          + (d <= radius ? 'التسجيل مسموح ✓' : 'التسجيل مرفوض — أنت أبعد بـ ' + Math.round(d - radius) + ' م')
+          + '<div class="mt8 inline"><button class="btn sm" id="setCenter">اجعل هذا الموقع هو المركز</button></div></div>';
+        const b = $('#setCenter');
+        if (b) b.onclick = () => { inputs.workplace_lat.i.value = p.lat.toFixed(6); inputs.workplace_lng.i.value = p.lng.toFixed(6); drawMap(); };
+      } catch (e) { testHost.innerHTML = '<div class="alert warn small mt8">⚠️ ' + esc(e.message) + '</div>'; }
+    }
+    function saveAll() {
+      const next = clone(s);
+      Object.keys(inputs).forEach((k) => {
+        const e = inputs[k];
+        next[k] = e.type === 'bool' ? (e.i.checked ? 1 : 0) : e.i.value;
+      });
+      if (!Number.isFinite(+next.workplace_lat) || +next.workplace_lat < -90 || +next.workplace_lat > 90) return toast('خط العرض غير صالح (−90 … 90)', 'bad', 6000);
+      if (!Number.isFinite(+next.workplace_lng) || +next.workplace_lng < -180 || +next.workplace_lng > 180) return toast('خط الطول غير صالح (−180 … 180)', 'bad', 6000);
+      if (+next.radius_m < 10) return toast('نطاق السماح يجب 10 أمتار على الأقل', 'bad');
+      if (+next.standard_hours_per_day <= 0) return toast('ساعات اليوم غير صالحة', 'bad');
+      const changed = Object.keys(next).filter((k) => String(next[k]) !== String(s[k]));
+      Object.assign(DB.settings, next);
+      save();
+      toast('تم حفظ ' + changed.length + ' إعداد ✓', 'ok');
+      $('#wpName').textContent = DB.settings.workplace_name;
+      go(CURRENT);
+    }
+    host.appendChild(pageHead('إعدادات النظام', [
+      h('button', { class: 'btn', text: '↺ استرجاع القيم المحفوظة', onclick: () => go('settings') }),
+      h('button', { class: 'btn primary', text: '💾 حفظ كل التغييرات', onclick: saveAll })
+    ]));
+    GROUPS.forEach((g) => {
+      const box = h('div', { class: 'grid c2' });
+      g.fields.forEach((fl) => {
+        const key = fl[0], label = fl[1], type = fl[2], attrs = fl[3] || {};
+        let i;
+        if (type === 'bool') {
+          i = h('input', { type: 'checkbox' }); i.checked = +s[key] === 1;
+          box.appendChild(h('label', { class: 'inline small', style: 'gap:8px;padding:6px 0' }, [i, h('span', { html: label })]));
+        } else {
+          i = h('input', Object.assign({ type: type === 'number' ? 'number' : type === 'time' ? 'time' : 'text' }, attrs));
+          i.value = s[key] == null ? '' : s[key];
+          box.appendChild(h('label', { class: 'field' }, [h('span', { html: label }), i]));
+        }
+        inputs[key] = { i: i, type: type };
+      });
+      const extra = g.id === 'workplace' ? h('div', { class: 'pad', style: 'border-top:1px solid var(--line)', }, [
+        h('div', { class: 'inline' }, [
+          h('button', { class: 'btn sm primary', text: '🛰️ موقعي الحالي كمركز', onclick: useMyLocation }),
+          h('button', { class: 'btn sm', text: '📏 معاينة النطاق', onclick: previewRadius }),
+          h('button', { class: 'btn sm ghost', text: '🎯 موقع تجريبي داخل النطاق', onclick: () => setDemo(true) }),
+          h('button', { class: 'btn sm ghost', text: '🚪 موقع تجريبي خارج النطاق', onclick: () => setDemo(false) })
+        ]),
+        h('div', { class: 'hint', text: 'طريقة سريعة: افتح OpenStreetMap، اضغط بزر الماوس الأيمن على موقع المكان وانسخ Latitude/Longitude والصقهما هنا، أو اضغط «موقعي الحالي» وأنت داخل مكان العمل.' }),
+        mapHost, testHost
+      ]) : null;
+      host.appendChild(card(g.title, h('div', {}, [box].concat(extra ? [extra] : []))));
+    });
+    host.appendChild(card('ℹ️ ملاحظات', h('div', { class: 'pad small', html: '<ul style="margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:5px"><li>كل القيم هنا هي <b>نفس مفاتيح جدول settings</b> في النسخة الحقيقية (<span class="mono">GET/PUT /api/settings</span>).</li><li>عند تغيير <span class="mono">standard_hours_per_day / break_minutes / overtime_multiplier / rounding_minutes</span> يعيد الخادم حساب الساعات والأجور تلقائيًا — وهذا الملف يعيد الحساب عند العرض بنفس الدالة.</li><li>هذه النسخة تحفظ في متصفحك فقط؛ لمسح كل شيء استخدم «↺ إعادة ضبط البيانات» في شاشة الدخول.</li></ul>' })));
+    drawMap();
+  };
+
+  const slugify = (v) => String(v).trim().replace(/\s+/g, '-').slice(0, 40) || 'page-' + Date.now().toString(36);
+  function cleanHtml(v) {
+    return String(v || '')
+      .replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '')
+      .replace(/<\s*iframe[^>]*>[\s\S]*?<\s*\/\s*iframe\s*>/gi, '')
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/javascript:/gi, '');
+  }
+  function renderCustomPage(host, slug) {
+    const p = DB.pages.find((x) => x.slug === slug);
+    const allowed = p && p.is_active && (p.audience === 'all' || p.audience === SESSION.user.role);
+    if (!allowed) { host.appendChild(h('div', { class: 'alert bad', text: 'هذه الصفحة غير متاحة لصلاحيتك أو محذوفة.' })); return; }
+    host.appendChild(pageHead(esc(p.icon || '📄') + ' ' + esc(p.title), [
+      h('span', { class: 'badge muted', text: 'آخر تحديث ' + dateTimeStr(p.updated_at) })
+    ].concat(isAdmin() ? [h('button', { class: 'btn sm', text: '✏️ تحرير', onclick: () => go('pages') })] : [])));
+    host.appendChild(card('', h('div', { class: 'pad', html: p.content || '<div class="empty">لا محتوى</div>' })));
+  }
+
+  RENDER.pages = (host) => {
+    const listHost = h('div');
+    function form(p) {
+      const isNew = !p;
+      const f = {};
+      const add = (label, id, attrs) => {
+        const i = h('input', Object.assign({ id: id }, attrs || {}));
+        if (p && p[id] != null) i.value = p[id];
+        f[id] = i;
+        return h('label', { class: 'field' }, [h('span', { html: label }), i]);
+      };
+      const secSel = h('select'); secSel.innerHTML = [['both', 'القائمتان (أدمن + موظف)'], ['admin', 'قائمة الأدمن'], ['employee', 'قائمة الموظفين']].map((o) => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
+      secSel.value = p ? p.section : 'both'; f.section = secSel;
+      const audSel = h('select'); audSel.innerHTML = [['all', 'الجميع'], ['admin', 'الأدمن فقط'], ['employee', 'الموظفون فقط']].map((o) => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
+      audSel.value = p ? p.audience : 'all'; f.audience = audSel;
+      const content = h('textarea', { rows: 12, style: 'font-family:ui-monospace,monospace;font-size:12.5px;direction:ltr;text-align:left' });
+      content.value = p ? p.content : '<h2>عنوان</h2>\n<p>اكتب المحتوى هنا… يدعم HTML مبسّطًا.</p>';
+      const preview = h('div', { class: 'alert info small mt8', style: 'display:none' });
+      const saveBtn = h('button', { class: 'btn primary', text: isNew ? 'إضافة الصفحة' : 'حفظ التعديل' });
+      const mm = modal({
+        title: isNew ? '➕ صفحة/قسم جديد' : '✏️ ' + esc(p.title), width: '840px',
+        body: h('div', {}, [
+          h('div', { class: 'grid c2' }, [
+            add('العنوان <b class="req">*</b>', 'title', { required: true, placeholder: 'مثال: لائحة الجزاءات' }),
+            add('الأيقونة (إيموجي)', 'icon', {}),
+            add('slug في الرابط', 'slug', { placeholder: 'يُنشأ تلقائيًا لو تُرك فارغًا' }),
+            h('label', { class: 'field' }, [h('span', { text: 'القسم في القائمة' }), secSel]),
+            h('label', { class: 'field' }, [h('span', { text: 'مين يشوفها؟' }), audSel]),
+            add('الترتيب', 'sort_order', { type: 'number', min: 0, max: 9999 })
+          ]),
+          h('div', { class: 'small', style: 'font-weight:600;margin-top:8px', text: 'المحتوى (HTML)' }),
+          content,
+          h('div', { class: 'inline mt8' }, [h('button', { class: 'btn sm ghost', type: 'button', text: '👁 معاينة', onclick: () => { preview.style.display = preview.style.display === 'none' ? '' : 'none'; preview.innerHTML = '<b>معاينة:</b>' + cleanHtml(content.value); } })]),
+          preview,
+          h('div', { class: 'hint mt8', text: 'تُزال وسوم السكريبت وسمات الأحداث (onclick…) تلقائيًا قبل الحفظ — نفس منطق sanitizeHtml في النسخة الحقيقية.' })
+        ]),
+        footer: [h('button', { class: 'btn', text: 'إلغاء', onclick: () => mm.close() }), saveBtn]
+      });
+      if (isNew) { f.sort_order.value = (DB.pages.length + 1) * 10; f.icon.value = '📄'; }
+      saveBtn.onclick = () => {
+        if (!f.title.value.trim()) return toast('اكتب عنوان الصفحة', 'warn');
+        const data = {
+          title: f.title.value.trim(), icon: f.icon.value.trim() || '📄',
+          slug: (f.slug.value.trim() || slugify(f.title.value)).toLowerCase(),
+          section: f.section.value, audience: f.audience.value, sort_order: +f.sort_order.value || 100,
+          content: cleanHtml(content.value), is_active: p ? p.is_active : 1, updated_at: new Date().toISOString()
+        };
+        if (isNew) {
+          if (DB.pages.some((x) => x.slug === data.slug)) data.slug += '-' + Date.now().toString(36).slice(-4);
+          data.id = DB.pages.reduce((mx, x) => Math.max(mx, x.id), 0) + 1;
+          DB.pages.push(data);
+        } else Object.assign(p, data);
+        save(); toast(isNew ? 'تمت إضافة الصفحة ✓ (ستظهر في القائمة الجانبية فورًا)' : 'تم الحفظ ✓', 'ok'); mm.close(); go('pages');
+      };
+    }
+    function draw() {
+      listHost.innerHTML = '';
+      const tt = table([
+        { label: '', render: (p) => '<span style="font-size:20px">' + esc(p.icon || '📄') + '</span>' },
+        { label: 'العنوان', render: (p) => '<b>' + esc(p.title) + '</b><div class="small muted mono">/' + esc(p.slug) + '</div>' },
+        { label: 'القسم', align: 'center', render: (p) => '<span class="badge brand">' + (p.section === 'admin' ? 'الأدمن' : p.section === 'employee' ? 'الموظفون' : 'القائمتان') + '</span>' },
+        { label: 'الجمهور', align: 'center', render: (p) => ({ all: 'الجميع', admin: 'الأدمن فقط', employee: 'الموظفون فقط' }[p.audience] || p.audience) },
+        { label: 'الحالة', align: 'center', render: (p) => (p.is_active ? '<span class="badge ok">ظاهرة</span>' : '<span class="badge muted">مخفية</span>') },
+        { label: 'الترتيب', align: 'center', render: (p) => p.sort_order },
+        { label: 'آخر تحديث', align: 'center', render: (p) => '<span class="small">' + dateTimeStr(p.updated_at) + '</span>' },
+        { label: '', align: 'center', render: (p) => '<div class="row-actions"><button class="btn sm ghost" data-v="' + p.id + '">👁 عرض</button><button class="btn sm" data-e="' + p.id + '">✏️ تحرير</button><button class="btn sm" data-t="' + p.id + '">' + (p.is_active ? '🙈 إخفاء' : '👁 إظهار') + '</button><button class="btn sm danger" data-d="' + p.id + '">🗑</button></div>' }
+      ], DB.pages.slice().sort((a, b) => a.sort_order - b.sort_order), { emptyText: 'لا صفحات بعد — أضف أول صفحة' });
+      listHost.appendChild(tt);
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-e]'), (b) => { b.onclick = () => form(DB.pages.find((x) => x.id === +b.dataset.e)); });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-t]'), (b) => {
+        b.onclick = () => { const p = DB.pages.find((x) => x.id === +b.dataset.t); p.is_active = p.is_active ? 0 : 1; save(); toast(p.is_active ? 'أصبحت الصفحة ظاهرة في القائمة' : 'أُخفيت الصفحة', 'ok'); go('pages'); };
+      });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-v]'), (b) => { b.onclick = () => go('page:' + DB.pages.find((x) => x.id === +b.dataset.v).slug); });
+      Array.prototype.forEach.call(tt.querySelectorAll('[data-d]'), (b) => {
+        b.onclick = async () => {
+          const p = DB.pages.find((x) => x.id === +b.dataset.d);
+          if (!(await confirmBox('حذف «' + p.title + '» نهائيًا؟', 'حذف صفحة'))) return;
+          DB.pages = DB.pages.filter((x) => x.id !== p.id);
+          save(); toast('تم حذف الصفحة', 'ok'); go('pages');
+        };
+      });
+    }
+    host.appendChild(pageHead('الصفحات والأقسام المخصصة', [h('button', { class: 'btn primary', text: '➕ إضافة صفحة', onclick: () => form() })]));
+    host.appendChild(h('div', { class: 'alert info', text: 'أضف لوائح وسياسات وروابط ونماذج… وتظهر فورًا في القائمة الجانبية حسب الجمهور المحدد — نفس فكرة /api/pages في النظام الحقيقي حيث يضيف الأدمن صفحات جديدة بدون تعديل الكود.' }));
+    host.appendChild(card('📄 كل الصفحات (' + DB.pages.length + ')', listHost));
+    draw();
+  };
+
+  /* ==================== صفحات الموظف ==================== */
+  RENDER.mydash = (host) => {
+    const u = SESSION.user, t = todayStr(), m = monthStr(t);
+    const row = DB.attendance.find((a) => a.user_id === u.id && a.work_date === t) || null;
+    const c = row ? evaluate(row) : null;
+    const mp = payrollFor(u.id, 'monthly', { month: m }), wp2 = payrollFor(u.id, 'weekly', { weekOf: t });
+    const myExp = DB.expenses.filter((e) => e.user_id === u.id);
+    const rej = DB.attendanceEvents.filter((e) => e.user_id === u.id && !e.allowed);
+    host.appendChild(pageHead('أهلًا، ' + esc(u.full_name) + ' 👋', [
+      h('span', { class: 'badge brand', text: dayName(t) + ' ' + dmy(t) }),
+      h('button', { class: 'btn primary', text: row && row.check_in_at && !row.check_out_at ? '⏱ تسجيل الانصراف' : '📍 تسجيل الحضور', onclick: () => go('mypunch') })
+    ]));
+    host.appendChild(h('div', { class: 'alert info', text: 'هذه صفحتك: بياناتك أنت فقط — لا يمكنك رؤية أو تعديل أي زميل.' }));
+    host.appendChild(statsRow([
+      { k: '📅 حالة اليوم', v: row ? (row.check_out_at ? 'مكتمل' : 'داخل العمل') : 'لم تسجّل', cls: row ? 'ok' : 'warn', s: row ? 'دخول ' + timeStr(row.check_in_at) + (row.check_out_at ? ' · خروج ' + timeStr(row.check_out_at) : ' · وردية مفتوحة') : 'سجّل داخل نطاق مكان العمل' },
+      { k: '⏱ ساعات اليوم', v: c ? num(c.workedHours) : '0.00', s: c && c.lateMinutes ? 'تأخير ' + minutesStr(c.lateMinutes) : 'لا تأخير' },
+      { k: '💰 أجر الشهر', v: money(mp.totals.netPayCents), cls: 'brand', s: num(mp.totals.workedHours) + ' ساعة × ' + money(u.hourly_rate_cents) },
+      { k: '📆 أجر الأسبوع', v: money(wp2.totals.netPayCents), s: wp2.range.from + ' ← ' + wp2.range.to },
+      { k: '🧾 مصروفات باسمك', v: money(myExp.reduce((s, e) => s + e.amount_cents, 0)), s: myExp.length + ' بند' },
+      { k: '💻 أجهزتك', v: DB.devices.filter((d) => d.user_id === u.id).length, s: 'يعتمد الإدارة الجهاز الجديد' },
+      { k: '🚫 محاولات مرفوضة', v: rej.length, cls: rej.length ? 'warn' : 'ok' },
+      { k: '🗓 أيام حضور الشهر', v: mp.totals.presentDays + ' / ' + mp.totals.expectedDays, s: (mp.totals.absentDays || 0) + ' غياب' }
+    ]));
+    const g = h('div', { class: 'grid c2', style: 'align-items:start' });
+    g.appendChild(card('📅 سجلاّتي هذا الشهر', table([
+      { label: 'اليوم', render: (d) => '<b>' + dmy(d.workDate) + '</b> <span class="tiny muted">' + dayName(d.workDate) + '</span>' },
+      { label: 'دخول', align: 'center', render: (d) => '<span class="mono">' + (d.checkInAt ? timeStr(d.checkInAt) : '—') + '</span>' },
+      { label: 'خروج', align: 'center', render: (d) => '<span class="mono">' + (d.checkOutAt ? timeStr(d.checkOutAt) : 'مفتوح') + '</span>' },
+      { label: 'ساعات', align: 'center', render: (d) => num(d.workedHours) },
+      { label: 'أجر اليوم', align: 'center', render: (d) => '<b>' + money(d.dayGrossCents) + '</b>' },
+      { label: 'الحالة', align: 'center', render: (d) => statusBadge(d.status) }
+    ], mp.days.slice(-12).reverse(), { compact: true, emptyText: 'لا سجلات هذا الشهر', footer: '<b>الإجمالي ' + num(mp.totals.workedHours) + ' ساعة = ' + money(mp.totals.grossPayCents) + '</b> → صافي <b>' + money(mp.totals.netPayCents) + '</b>' })));
+    g.appendChild(card('🧾 مصروفاتي + 🔔 تنبيهاتي', h('div', {}, [
+      table([{ label: 'التاريخ', render: (e) => dmy(e.spent_on) }, { label: 'البيان', render: (e) => esc(e.title) }, { label: 'المبلغ', align: 'center', render: (e) => '<b>' + money(e.amount_cents) + '</b>' }], myExp, { compact: true, emptyText: 'لا مصروفات مرتبطة بك' }),
+      h('div', { style: 'height:10px' }),
+      DB.notifications.filter((n) => n.user_id === u.id).length
+        ? h('ul', { class: 'list', html: DB.notifications.filter((n) => n.user_id === u.id).slice(-4).reverse().map((n) => '<li><span class="dot warn"></span><div style="flex:1"><b>' + esc(n.title) + '</b><div class="small muted">' + esc(n.message) + '</div></div></li>').join('') })
+        : h('div', { class: 'empty', text: 'لا تنبيهات لك' })
+    ])));
+    host.appendChild(g);
+    const pages = visiblePages();
+    host.appendChild(card('📄 أقسام وقرارات من الإدارة', pages.length ? h('div', { class: 'inline', style: 'padding:12px 16px' }, pages.map((p) => h('button', { class: 'btn sm', html: esc(p.icon || '📄') + ' ' + esc(p.title), onclick: () => go('page:' + p.slug) }))) : h('div', { class: 'empty', text: 'لا أقسام إضافية بعد' })));
+  };
+
+  RENDER.mypunch = (host) => {
+    const u = SESSION.user, t = todayStr();
+    const statusLine = h('div', { class: 'gps-status', text: 'جارٍ قراءة موقعك…' });
+    const resultHost = h('div');
+    const logHost = h('div');
+    let lastPos = null;
+    const todayRow = () => DB.attendance.find((a) => a.user_id === u.id && a.work_date === t);
+    const inBtn = h('button', { class: 'punch-btn in', html: '<span>تسجيل حضور</span><small>بالضغط داخل النطاق</small>' });
+    const outBtn = h('button', { class: 'punch-btn out', html: '<span>تسجيل انصراف</span><small>بالضغط داخل النطاق</small>' });
+    function updateButtons() {
+      const r = todayRow();
+      inBtn.disabled = !!(r && r.check_in_at);
+      outBtn.disabled = !(r && r.check_in_at) || !!(r && r.check_out_at);
+    }
+    async function locateAndPreview() {
+      try {
+        const p = await locate({ highAccuracy: true });
+        lastPos = p;
+        const r = previewDistance(p);
+        statusLine.innerHTML = (p.demo ? '🎯 موقع تجريبي · ' : '🛰️ ') + 'دقة ±' + Math.round(p.accuracy || 0) + ' م · المسافة <b>' + r.distance + ' م</b> من «' + esc(r.workplace.name) + '» · النطاق ' + r.radius + ' م ⇒ '
+          + (r.inRange ? '<span class="badge ok">داخل النطاق — التسجيل مسموح ✓</span>' : '<span class="badge bad">خارج النطاق بـ ' + r.outsideBy + ' م — لن يُسجَّل شيء</span>');
+      } catch (e) {
+        statusLine.innerHTML = '<span class="badge warn">⚠️ ' + esc(e.message) + '</span> <button class="btn sm ghost" id="notifyAdmin">📣 أبلغ الإدارة</button>';
+        const b = $('#notifyAdmin');
+        if (b) b.onclick = () => {
+          pushEvent({ user_id: u.id, action: 'gps_denied', occurred_at: new Date().toISOString(), lat: null, lng: null, accuracy: null, distance: null, allowed: 0, reason: e.code || 'gps_denied', note: e.message });
+          notifyAudience('admin', { type: 'gps_denied', title: 'مشكلة في تحديد الموقع', message: u.full_name + ' واجه مشكلة في إذن الموقع: ' + e.message, severity: 'warning' });
+          save(); toast('تم إبلاغ الإدارة ✓', 'ok'); b.disabled = true; b.textContent = 'تم الإبلاغ ✓';
+          drawLog();
+        };
+      }
+    }
+    function setDemo(inside) {
+      const wp = { lat: +DB.settings.workplace_lat, lng: +DB.settings.workplace_lng };
+      DEMO_POS = inside ? { lat: wp.lat + 0.0002, lng: wp.lng + 0.0002, accuracy: 12 }
+        : { lat: wp.lat + 0.004, lng: wp.lng + 0.003, accuracy: 18 };
+      toast('تم ضبط موقع ' + (inside ? 'داخل النطاق ✓' : 'خارج النطاق ✗') + ' (' + Math.round(haversineM(DEMO_POS.lat, DEMO_POS.lng, wp.lat, wp.lng)) + ' م) — اضغط زر التسجيل لتجربة المنطق', inside ? 'ok' : 'warn', 6000);
+      locateAndPreview();
+    }
+    function drawLog() {
+      logHost.innerHTML = '';
+      logHost.appendChild(table([
+        { label: 'اليوم', render: (a) => '<b>' + dmy(a.work_date) + '</b><div class="small muted">' + dayName(a.work_date) + '</div>' },
+        { label: 'دخول', align: 'center', render: (a) => a.check_in_at ? '<span class="mono">' + timeStr(a.check_in_at) + '</span>' : '—' },
+        { label: 'خروج', align: 'center', render: (a) => a.check_out_at ? '<span class="mono">' + timeStr(a.check_out_at) + '</span>' : (a.check_in_at ? '<span class="badge warn">مفتوح</span>' : '—') },
+        { label: 'ساعات', align: 'center', render: (a) => '<b>' + num(evaluate(a).workedHours) + '</b>' },
+        { label: 'أجر', align: 'center', render: (a) => money(evaluate(a).grossPayCents) },
+        { label: 'المسافة', align: 'center', render: (a) => (a.check_in_dist != null ? Math.round(a.check_in_dist) + ' م' : (a.check_in_source === 'admin' ? 'يدوي' : '—')) },
+        { label: 'الحالة', align: 'center', render: (a) => statusBadge(evaluate(a).status) }
+      ], DB.attendance.filter((a) => a.user_id === u.id).sort((a, b) => (a.work_date < b.work_date ? 1 : -1)).slice(0, 14), { compact: true, emptyText: 'لا سجلات بعد' }));
+      updateButtons();
+      renderMap();
+    }
+    function renderMap() {
+      const mh = $('#punchMap');
+      if (mh) mh.innerHTML = radarSVG([{ name: u.full_name, lat: (todayRow() || {}).check_in_lat, lng: (todayRow() || {}).check_in_lng }]
+        .concat(lastPos ? [{ name: 'أنت الآن', lat: lastPos.lat, lng: lastPos.lng }] : []));
+    }
+    async function doPunch(action) {
+      const btn = action === 'check_in' ? inBtn : outBtn;
+      inBtn.disabled = outBtn.disabled = true;
+      const old = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner"></span><small>جارٍ التحقق من موقعك…</small>';
+      resultHost.innerHTML = '';
+      try {
+        const r = await punch(u, action);
+        resultHost.innerHTML = '<div class="alert ok"><b>تم ✓ تسجيل ' + (action === 'check_in' ? 'الحضور' : 'الانصراف') + '</b><div class="small mt8">المسافة ' + r.distance + ' م · نطاق السماح ' + r.workplace.radiusM + ' م · الوقت المسجَّل ' + dateTimeStr(action === 'check_in' ? r.row.check_in_at : r.row.check_out_at) + ' (توقيت ' + esc(DB.settings.timezone) + ')' + (r.pos.demo ? ' · <span class="badge muted">موقع تجريبي</span>' : '') + (action === 'check_out' ? ' · ساعات اليوم <b>' + num(r.computed.workedHours) + '</b> · أجر اليوم <b>' + money(r.computed.grossPayCents) + '</b>' : '') + '</div></div>';
+        toast(action === 'check_in' ? 'تم تسجيل الحضور ✓' : 'تم تسجيل الانصراف ✓', 'ok');
+        if (navigator.vibrate) navigator.vibrate(60);
+        drawLog();
+        const mp2 = payrollFor(u.id, 'monthly', { month: monthStr(t) });
+        const ph = $('#myPay');
+        if (ph) ph.innerHTML = payKv(mp2);
+      } catch (e) {
+        let extra = '';
+        if (e.code === 'out_of_range') extra = '<div class="small mt8">المسافة <b>' + e.distance + ' م</b> · النطاق المسموح <b>' + e.radius + ' م</b> · أنت أبعد بـ <b>' + e.outsideBy + ' م</b> عن الحد. اقترب من «' + esc(e.workplace.name) + '» ثم أعد المحاولة — <b>لم يُسجَّل أي شيء</b>.</div>';
+        else if (e.code === 'poor_accuracy') extra = '<div class="small mt8">دقة القراءة ±' + e.accuracy + ' م، والحد الأقصى المقبول ±' + e.maxAccuracy + ' م. اتحرك لمكان مفتوح وجرّب تاني.</div>';
+        else if (e.code === 'unknown_device') extra = '<div class="small mt8">الإدارة فعّلت «منع التسجيل من جهاز غير معتاد».' + (e.deviceLabel ? ' جهازك الحالي: <b>' + esc(e.deviceLabel) + '</b> <span class="mono">(' + esc(e.deviceHash) + ')</span>.' : '') + ' استخدم جهازك المعتاد أو اطلب من الأدمن اعتماد الجهاز، وقد وصلهم تنبيه بالمحاولة.</div>';
+        else if (e.code === 'gps_denied' || e.code === 'gps_unsupported') extra = '<div class="small mt8">فعّل GPS من إعدادات المتصفح وامنح إذن Location ثم أعد المحاولة، أو استخدم أحد زرّي «موقع تجريبي» لتجربة المنطق بدون GPS.</div>';
+        resultHost.innerHTML = '<div class="alert ' + (e.status === 403 ? 'bad' : 'warn') + '"><b>' + esc(e.message) + '</b>' + extra + '</div>';
+        toast(e.message, e.status === 403 ? 'bad' : 'warn', 6500);
+        drawLog();
+      } finally {
+        btn.innerHTML = old;
+        updateButtons();
+      }
+    }
+    function payKv(mp2) {
+      return '<div class="kv" style="padding:0"><dt>ساعات الشهر</dt><dd>' + num(mp2.totals.workedHours) + '</dd><dt>سعر الساعة</dt><dd>' + money(u.hourly_rate_cents) + '</dd><dt>الأساسي</dt><dd>' + money(mp2.totals.grossPayCents) + '</dd><dt>بدلات/مكافآت</dt><dd>' + money(mp2.totals.bonusCents + mp2.totals.allowanceCents) + '</dd><dt>خصومات</dt><dd>' + money(mp2.totals.deductionCents) + '</dd><dt>الصافي</dt><dd><b style="color:var(--ok)">' + money(mp2.totals.netPayCents) + '</b></dd></div>';
+    }
+    function draw() {
+      host.innerHTML = '';
+      host.appendChild(pageHead('تسجيل الحضور والانصراف', [
+        h('button', { class: 'btn sm', text: '🎯 داخل النطاق (تجريبي)', onclick: () => setDemo(true) }),
+        h('button', { class: 'btn sm', text: '🚪 خارج النطاق (تجريبي)', onclick: () => setDemo(false) }),
+        h('button', { class: 'btn sm ghost', text: '↻ إعادة قراءة الموقع', onclick: () => locateAndPreview() })
+      ]));
+      host.appendChild(card('📍 مكان العمل (' + DB.settings.radius_m + ' متر)', h('div', { class: 'pad' }, [
+        h('div', { id: 'punchMap', html: radarSVG([]) }),
+        h('div', { class: 'mt8' }, [statusLine]),
+        h('div', { class: 'kv mt8', style: 'padding:0', html: '<dt>المكان</dt><dd>' + esc(DB.settings.workplace_name) + '</dd><dt>الإحداثيات</dt><dd class="mono">' + DB.settings.workplace_lat + ', ' + DB.settings.workplace_lng + '</dd><dt>يوم العمل</dt><dd>' + DB.settings.work_start_time + ' ← ' + DB.settings.work_end_time + ' (' + DB.settings.standard_hours_per_day + ' س، راحة ' + DB.settings.break_minutes + ' د)</dd>' }),
+        h('div', { class: 'punch' }, [inBtn, outBtn]),
+        resultHost,
+        h('div', { class: 'hint', text: 'لو المتصفح لا يسمح بالموقع (مثلاً داخل نافذة معاينة) استخدم زرّي «موقع تجريبي» أعلى الصفحة لتجربة نفس المنطق بالضبط.' })
+      ])));
+      host.appendChild(card('📅 سجلّي (آخر 14 يوم)', logHost));
+      host.appendChild(h('div', { class: 'grid c2', style: 'align-items:start' }, [
+        card('🚫 محاولاتي المرفوضة', h('div', { id: 'myEv' })),
+        card('💰 ملخص أجري هذا الشهر', h('div', { id: 'myPay' }))
+      ]));
+      const mp2 = payrollFor(u.id, 'monthly', { month: monthStr(t) });
+      $('#myPay').innerHTML = payKv(mp2);
+      $('#myEv').innerHTML = '';
+      $('#myEv').appendChild(table([
+        { label: 'الوقت', render: (e) => '<span class="small mono">' + dateTimeStr(e.occurred_at) + '</span>' },
+        { label: 'الإجراء', align: 'center', render: (e) => (e.action === 'check_in' ? 'حضور' : e.action === 'check_out' ? 'انصراف' : esc(e.action)) },
+        { label: 'النتيجة', align: 'center', render: (e) => '<span class="badge ' + (e.allowed ? 'ok' : 'bad') + '">' + (e.allowed ? 'تم ✓' : esc(reasonText(e.reason))) + '</span>' },
+        { label: 'المسافة', align: 'center', render: (e) => (e.distance != null ? Math.round(e.distance) + ' م' : '—') }
+      ], DB.attendanceEvents.filter((e) => e.user_id === u.id).slice(-10).reverse(), { compact: true, emptyText: 'لا محاولات' }));
+      drawLog();
+    }
+    inBtn.onclick = () => doPunch('check_in');
+    outBtn.onclick = () => doPunch('check_out');
+    draw();
+    locateAndPreview();
+  };
+
+  RENDER.mypayroll = (host) => {
+    const u = SESSION.user;
+    let mode = 'monthly';
+    const st = { month: monthStr(todayStr()), weekOf: todayStr() };
+    const box = h('div');
+    const monthI = h('input', { type: 'month', value: st.month });
+    const weekI = h('input', { type: 'date', value: todayStr() });
+    const labM = h('label', { class: 'field', style: 'max-width:200px' }, [h('span', { text: 'الشهر' }), monthI]);
+    const labW = h('label', { class: 'field', style: 'max-width:200px;display:none' }, [h('span', { text: 'أسبوع يوم' }), weekI]);
+    const TABS = [['monthly', 'شهري'], ['weekly', 'أسبوعي']];
+    const tabs = h('div', { class: 'tabs' });
+    TABS.forEach((tp, i) => tabs.appendChild(h('button', {
+      class: i === 0 ? 'active' : '', text: tp[1],
+      onclick: () => {
+        mode = tp[0];
+        Array.prototype.forEach.call(tabs.children, (b, j) => b.classList.toggle('active', TABS[j][0] === mode));
+        labM.style.display = mode === 'monthly' ? '' : 'none';
+        labW.style.display = mode === 'weekly' ? '' : 'none';
+        draw();
+      }
+    })));
+    monthI.onchange = () => { st.month = monthI.value; draw(); };
+    weekI.onchange = () => { st.weekOf = weekI.value; draw(); };
+    function draw() {
+      const p = payrollFor(u.id, mode, st), t2 = p.totals;
+      box.innerHTML = '';
+      box.appendChild(statsRow([
+        { k: '⏱ الساعات', v: num(t2.workedHours), s: p.range.from + ' ← ' + p.range.to },
+        { k: '💰 الأساسي', v: money(t2.grossPayCents), s: num(t2.workedHours) + ' × ' + money(t2.hourlyRateCents) },
+        { k: '🎁 بدلات ومكافآت', v: money(t2.bonusCents + t2.allowanceCents) },
+        { k: '➖ خصومات', v: money(t2.deductionCents), cls: t2.deductionCents ? 'warn' : '' },
+        { k: '💵 الصافي', v: money(t2.netPayCents), cls: 'brand' },
+        { k: '🚩 تأخير', v: minutesStr(t2.lateMinutes), cls: t2.lateMinutes ? 'warn' : 'ok' },
+        { k: '📅 أيام', v: t2.presentDays + ' / ' + t2.expectedDays, s: (t2.absentDays || 0) + ' غياب' },
+        { k: '⏳ ساعات إضافية', v: num(t2.overtimeHours), s: 'معامل ' + DB.settings.overtime_multiplier + '×' }
+      ]));
+      box.appendChild(h('div', { class: 'pad', html: '<div class="mono small" style="background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px;overflow:auto;direction:ltr;text-align:left">' + esc(mode === 'monthly' ? monthLabel(st.month) : 'أسبوع ' + p.range.from + ' → ' + p.range.to) + ': ' + num(t2.workedHours) + ' h × ' + (t2.hourlyRateCents / 100).toFixed(2) + ' = ' + (t2.grossPayCents / 100).toFixed(2) + '<br>net = ' + (t2.grossPayCents / 100).toFixed(2) + ' + ' + ((t2.bonusCents + t2.allowanceCents) / 100).toFixed(2) + ' − ' + (t2.deductionCents / 100).toFixed(2) + ' = <b>' + (t2.netPayCents / 100).toFixed(2) + '</b></div>' }));
+      box.appendChild(table([
+        { label: 'اليوم', render: (d) => '<b>' + dmy(d.workDate) + '</b> <span class="tiny muted">' + dayName(d.workDate) + '</span>' },
+        { label: 'دخول', align: 'center', render: (d) => '<span class="mono">' + (d.checkInAt ? timeStr(d.checkInAt) : '—') + '</span>' },
+        { label: 'خروج', align: 'center', render: (d) => '<span class="mono">' + (d.checkOutAt ? timeStr(d.checkOutAt) : 'مفتوح') + '</span>' },
+        { label: 'المسافة', align: 'center', render: (d) => (d.inDist != null ? Math.round(d.inDist) + ' م' : (d.inSource === 'admin' ? 'يدوي' : '—')) },
+        { label: 'ساعات', align: 'center', render: (d) => num(d.workedHours) },
+        { label: 'أجر اليوم', align: 'center', render: (d) => '<b>' + money(d.dayGrossCents) + '</b>' },
+        { label: 'الحالة', align: 'center', render: (d) => statusBadge(d.status) }
+      ], p.days.slice().reverse(), { emptyText: 'لا أيام في هذه الفترة', footer: '<b>الإجمالي: ' + num(t2.workedHours) + ' ساعة = ' + money(t2.grossPayCents) + '</b> · الصافي <b>' + money(t2.netPayCents) + '</b>' }));
+      box.appendChild(h('div', { class: 'pad', style: 'border-top:1px solid var(--line)', html: '<b>بنود هذا الشهر</b>' + (t2.adjustments.length ? '<ul class="list mt4">' + t2.adjustments.map((a) => '<li><span class="badge ' + (a.type === 'deduction' ? 'bad' : 'ok') + '">' + (a.type === 'deduction' ? 'خصم' : a.type === 'bonus' ? 'مكافأة' : 'بدل') + '</span><span style="flex:1">' + esc(a.reason || '') + '</span><b>' + money(a.amount_cents) + '</b></li>').join('') + '</ul>' : '<div class="small muted mt4">لا بنود إضافية (بدلات/خصومات) هذا الشهر</div>') }));
+    }
+    host.appendChild(pageHead('كشف أجري', []));
+    host.appendChild(h('div', { class: 'alert info', html: 'الأجر = <b>الساعات المسجَّلة بالـ GPS × سعر ساعتك</b> (' + money(u.hourly_rate_cents) + ') — لا يُحتسب أي يوم بلا سجل.' }));
+    host.appendChild(card('', h('div', {}, [tabs, h('div', { class: 'filters' }, [labM, labW]), box])));
+    draw();
+  };
+
+  RENDER.myexpenses = (host) => {
+    const u = SESSION.user, m = monthStr(todayStr());
+    const rows = DB.expenses.filter((e) => e.user_id === u.id).sort((a, b) => (a.spent_on < b.spent_on ? 1 : -1));
+    host.appendChild(pageHead('مصروفاتي', [h('span', { class: 'small muted', text: 'ترى البنود المرتبطة بك أنت فقط' })]));
+    host.appendChild(statsRow([
+      { k: '🧾 بنودي', v: rows.length },
+      { k: '💸 إجماليها', v: money(rows.reduce((s, e) => s + e.amount_cents, 0)) },
+      { k: '📅 هذا الشهر', v: money(rows.filter((e) => e.spent_on >= m + '-01').reduce((s, e) => s + e.amount_cents, 0)) },
+      { k: '⬆ أكبر بند', v: rows.length ? money(Math.max.apply(null, rows.map((e) => e.amount_cents))) : '—' }
+    ]));
+    host.appendChild(card('', table([
+      { label: 'التاريخ', render: (e) => '<b>' + dmy(e.spent_on) + '</b><div class="small muted">' + dayName(e.spent_on) + '</div>' },
+      { label: 'البيان', render: (e) => esc(e.title) + (e.note ? '<div class="small muted">' + esc(e.note) + '</div>' : '') },
+      { label: 'الفئة', align: 'center', render: (e) => '<span class="badge muted">' + esc(e.category || '—') + '</span>' },
+      { label: 'المبلغ', align: 'center', render: (e) => '<b>' + money(e.amount_cents) + '</b>' },
+      { label: 'المورد', render: (e) => esc(e.vendor || '—') },
+      { label: 'فاتورة', render: (e) => '<span class="mono small">' + esc(e.invoice_no || '—') + '</span>' }
+    ], rows, { emptyText: 'لا توجد مصروفات مرتبطة بك' })));
+  };
+
+  RENDER.myprofile = (host) => {
+    const u = SESSION.user;
+    const fpBox = h('div', { class: 'pad small', html: '<span class="muted">جارٍ حساب بصمتك…</span>' });
+    host.appendChild(pageHead('بياناتي', [h('span', { class: 'badge muted', text: 'صلاحيتك: ' + (u.role === 'admin' ? 'أدمن' : 'موظف') })]));
+    const g = h('div', { class: 'grid c2', style: 'align-items:start' });
+    g.appendChild(card('👤 بياناتي', h('div', { class: 'kv', style: 'padding-top:12px', html: [['الاسم', u.full_name], ['اسم المستخدم', '@' + u.username], ['الوظيفة', u.job_title], ['القسم', u.department], ['البريد', u.email], ['الموبايل', u.phone], ['تاريخ التعيين', u.hired_on], ['الحالة', u.status === 'active' ? 'نشط' : 'موقوف'], ['سعر الساعة', money(u.hourly_rate_cents) + ' (يحدده الأدمن)']]
+      .map((r) => '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1] || '—') + '</dd>').join('') })));
+    const f = {};
+    const ed = h('div', { class: 'grid c2' });
+    [['full_name', 'الاسم الكامل'], ['phone', 'الموبايل'], ['address', 'العنوان'], ['emergency_contact', 'جهة اتصال للطوارئ']].forEach((pr) => {
+      const i = h('input', { value: u[pr[0]] || '' }); f[pr[0]] = i;
+      ed.appendChild(h('label', { class: 'field' }, [h('span', { text: pr[1] }), i]));
+    });
+    ed.appendChild(h('div', { class: 'small muted', style: 'grid-column:1/-1', text: 'هذه الحقول فقط يمكنك تعديلها. الوظيفة/القسم/سعر الساعة/الحالة/كلمة مرور زميل = للأدمن (الخادم الحقيقي يرفض 400/403 لو أرسلتها).' }));
+    ed.appendChild(h('button', { class: 'btn primary sm', style: 'grid-column:1/-1;justify-self:start', text: '💾 حفظ', onclick: () => { Object.keys(f).forEach((k) => { u[k] = f[k].value.trim(); }); save(); toast('تم حفظ بياناتك ✓', 'ok'); $('#avatar').textContent = String(u.full_name).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join(''); } }));
+    g.appendChild(card('✏️ تعديل مسموح', ed));
+    const cur = h('input', { type: 'password', placeholder: 'كلمة المرور الحالية' });
+    const n1 = h('input', { type: 'password', placeholder: 'كلمة المرور الجديدة' });
+    const n2 = h('input', { type: 'password', placeholder: 'تأكيد الجديدة' });
+    const meter = h('div', { class: 'meter mt4' }, [h('i', { style: 'width:0%' })]);
+    n1.addEventListener('input', () => {
+      const v = n1.value;
+      let sc = 0;
+      if (v.length >= +DB.settings.password_min_length) sc += 30;
+      if (/[A-Z]/.test(v)) sc += 20; if (/[a-z]/.test(v)) sc += 15; if (/\d/.test(v)) sc += 20; if (/[^\w\s]/.test(v)) sc += 15;
+      meter.firstChild.style.width = sc + '%';
+      meter.className = 'meter mt4 ' + (sc > 70 ? 'ok' : sc < 40 ? 'bad' : '');
+    });
+    g.appendChild(card('🔑 تغيير كلمة المرور', h('div', { class: 'grid' }, [
+      h('label', { class: 'field' }, [h('span', { text: 'الحالية' }), cur]),
+      h('label', { class: 'field' }, [h('span', { text: 'الجديدة (حد أدنى ' + DB.settings.password_min_length + ' محرف)' }), n1]),
+      meter,
+      h('label', { class: 'field' }, [h('span', { text: 'التأكيد' }), n2]),
+      h('button', { class: 'btn primary sm', style: 'justify-self:start', text: 'تغيير كلمة المرور', onclick: () => {
+        if (cur.value !== u.password) return toast('كلمة المرور الحالية غير صحيحة', 'bad');
+        if (n1.value.length < +DB.settings.password_min_length) return toast('كلمة المرور قصيرة — الحد ' + DB.settings.password_min_length, 'warn');
+        if (n1.value !== n2.value) return toast('التأكيد غير مطابق', 'warn');
+        u.password = n1.value;
+        DB.loginEvents.push({ id: DB.loginEvents.length + 1, user_id: u.id, username: u.username, success: 1, is_usual: 1, reason: 'password_changed', occurred_at: new Date().toISOString(), ip: 'localhost', device_label: '', user_agent: '' });
+        save(); toast('تم تغيير كلمة المرور ✓', 'ok');
+        [cur, n1, n2].forEach((i) => { i.value = ''; }); meter.firstChild.style.width = '0%';
+      } }),
+      h('div', { class: 'hint', text: 'في النسخة الحقيقية تُخزَّن bcrypt بـ 10 rounds، ولا تظهر أبدًا في أي رد من الخادم.' })
+    ])));
+    const devs = DB.devices.filter((d) => d.user_id === u.id);
+    g.appendChild(card('💻 أجهزتي', devs.length ? h('ul', { class: 'list', html: devs.map((d) => '<li><span class="badge ' + (d.is_usual ? 'ok' : d.trusted ? 'muted' : 'warn') + '">' + (d.is_usual ? 'معتاد ✓' : d.trusted ? 'معتمد' : 'بانتظار الاعتماد') + '</span><span style="flex:1"><b>' + esc(d.label || 'جهاز') + '</b><div class="small muted">' + esc(d.screen || '') + ' · ' + esc(d.language || '') + ' · ' + (d.login_count || 0) + ' دخول · آخر استخدام ' + esc(timeAgo(d.last_seen_at)) + '</div></span></li>').join('') }) : h('div', { class: 'empty', text: 'لا أجهزة مسجّلة بعد' })));
+    g.appendChild(card('🧬 بصمة هذا الجهاز', fpBox));
+    host.appendChild(g);
+    collectFingerprint().then((fp) => {
+      const usual = DB.devices.some((d) => d.hash === fp.hash && d.is_usual);
+      fpBox.innerHTML = '<div class="kv" style="padding:0 0 6px"><dt>معرّف الجهاز</dt><dd class="mono">' + esc(fp.deviceUuid) + '</dd>'
+        + '<dt>البصمة (SHA-256)</dt><dd class="mono">' + esc(fp.hash) + '</dd>'
+        + '<dt>المتصفح/النظام</dt><dd>' + esc(fp.label) + '</dd>'
+        + '<dt>المنطقة الزمنية</dt><dd>' + esc(fp.timezone) + ' (UTC' + (fp.zoneOffset >= 0 ? '+' : '-') + Math.abs(fp.zoneOffset / 60).toFixed(0) + ')</dd>'
+        + '<dt>العتاد</dt><dd>' + fp.hardwareConcurrency + ' نواة · ' + (fp.deviceMemory || '?') + ' جيجا · نقاط لمس ' + fp.touchPoints + '</dd></div>'
+        + '<div class="hint">تُرسل هذه المكونات مع كل دخول؛ أي تغيير جوهري فيها يعني «جهازًا جديدًا» وتنبيهًا للأدمن. حالتك الآن: '
+        + (usual ? '<span class="badge ok">جهازك معتاد ✓</span>' : '<span class="badge warn">غير معتمد بعد</span>') + '</div>';
+    });
+  };
+
+  RENDER.docs = (host) => {
+    const m = monthStr(todayStr());
+    const monthNet = DB.users.filter((u) => u.role === 'employee').reduce((s, u) => s + payrollFor(u.id, 'monthly', { month: m }).totals.netPayCents, 0);
+    const sec = (title, html) => card(title, h('div', { class: 'pad small', html: html }));
+    host.appendChild(pageHead('توثيق المشروع', [h('button', { class: 'btn', text: '🖨 حفظ PDF', onclick: () => window.print() })]));
+    host.appendChild(h('div', { class: 'alert info', html: '<b>هذا الملف:</b> نسخة تجريبية كاملة المنطق في <b>ملف HTML واحد</b> بدون سيرفر (بيانات وهمية في <span class="mono">localStorage</span> — امسحها بزر «إعادة ضبط البيانات» في شاشة الدخول).<br><b>النسخة الحقيقية Full-stack</b> في مجلد <span class="mono">employee-management/</span>: Node + Express + PostgreSQL + bcrypt + JWT + Nodemailer، وواجهات نفس هذه الشاشات مقسّمة على 16 ملف HTML مستقل.' }));
+    host.appendChild(sec('1) المزايا المنفّذة', ''
+      + '<ul style="margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:6px">'
+      + '<li>🔐 <b>دخول بصلاحيتين</b>: أدمن كل الصلاحيات (إضافة/تعديل/حذف موظفين، تغيير أي بيانات، سعر الساعة لكل موظف، Latitude/Longitude ونطاق السماح بالمتر، المصروفات والتقارير والإعدادات، إضافة صفحات وأقسام جديدة) وموظف <b>بياناته فقط</b> — وفي النسخة الحقيقية القيود مفروضة في الخادم وليس بالواجهة.</li>'
+      + '<li>📍 <b>حضور/انصراف بالـ GPS</b>: زرّان، <span class="mono">navigator.geolocation</span>، مسافة <b>Haversine</b>؛ داخل النطاق ⇒ تسجيل فوري بالوقت والتاريخ؛ خارج النطاق ⇒ «لازم تكون في مكان الشغل عشان تسجل حضور» وبدون تسجيل + محاولة تُسجَّل للأدمن؛ رفض الإذن ⇒ رسالة تفعيل GPS وزر إبلاغ الإدارة.</li>'
+      + '<li>📅 <b>سجل</b>: تاريخ + دخول + خروج + عدد الساعات لكل يوم، مع المحاولات المرفوضة ومصفوفة شهرية وتصدير CSV.</li>'
+      + '<li>💰 <b>الأجور</b>: سعر ساعة لكل موظف، والأجر = ساعات السجل × السعر (راحة، تقريب، أوفر تايم) + إجمالي أسبوعي/شهري + بدلات وخصومات ⇒ صافي.</li>'
+      + '<li>🧾 <b>المصروفات</b>: بيان + مبلغ + تاريخ + مرتبطة بموظف أو عامة، وتقارير حسب الفئة/الموظف/الشهر وتصدير CSV.</li>'
+      + '<li>🛡️ <b>الأمان</b>: بصمة جهاز (User-Agent + معلومات المتصفح) تُخزَّن عند أول دخول كجهاز «معتاد»، تنبيه فوري عند جهاز مختلف بالاسم والوقت ومعلومات الجهاز، سجل عمليات دخول، اعتماد/إلغاء اعتماد، وسياسة اختيارية تمنع التسجيل من جهاز غير معتاد.</li>'
+      + '<li>🖥️ <b>داشبورد</b>: الأدمن (كل الموظفين + إجمالي الأجور + إجمالي المصروفات + خريطة مكان العمل + تنبيهات الأجهزة غير المعتادة) والموظف (ساعاته وأجره وسجل حضوره فقط).</li>'
+      + '<li>📱 RTL بالكامل ومتجاوب + أنماط طباعة.</li></ul>'));
+    host.appendChild(sec('2) هيكل النسخة الحقيقية', '<pre class="mono" style="margin:0;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;direction:ltr;text-align:left">'
+      + 'employee-management/&#10;'
+      + '├── server/&#10;'
+      + '│   ├── app.js · index.js          Express + static + 404/500 → migrate → seed → listen&#10;'
+      + '│   ├── config.js                  .env · اختيار المحرك (postgres ⇄ sqlite) · JWT · SMTP&#10;'
+      + '│   ├── db/  index.js · schema.postgres.sql · schema.sqlite.sql · migrate.js · seed.js · reset.js   (11 جدول)&#10;'
+      + '│   ├── lib/ time · geo (Haversine) · validate · hash · token · http · sanitize · bus&#10;'
+      + '│   ├── middleware/auth.js         JWT + requireAdmin&#10;'
+      + '│   ├── services/ settings · device (البصمة) · attendance (المنطق) · payroll · notify&#10;'
+      + '│   └── routes/ auth · users · fields · attendance · payroll · expenses · settings · security · notifications · pages · reports   (80 نقطة API)&#10;'
+      + '├── public/&#10;'
+      + '│   ├── css/styles.css&#10;'
+      + '│   ├── js/ api.js · fingerprint.js · geolocation.js · map.js · layout.js + سكربت لكل صفحة&#10;'
+      + '│   ├── login.html · index.html · 404.html · page.html · profile.html · attendance.html&#10;'
+      + '│   ├── admin-dashboard · admin-employees · admin-attendance · admin-payroll · admin-expenses · admin-security · admin-settings · admin-pages&#10;'
+      + '│   └── employee-dashboard · employee-payroll&#10;'
+      + '├── tests/ api.test.js (54 خطوة) · front.check.js · shapes.check.js&#10;'
+      + '└── docs/API.md · README.md · .env.example</pre>'));
+    host.appendChild(sec('3) التشغيل', '<pre class="mono" style="margin:0;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;direction:ltr;text-align:left">'
+      + 'npm install&#10;cp .env.example .env      # PGHOST/PGDATABASE/PGUSER/PGPASSWORD&#10;npm run setup             # db:migrate + db:seed (بيانات تجريبية)&#10;npm start                 # http://localhost:3000&#10;npm test                  # 54 خطوة API + فحص ساكن + فحص عقد الواجهة&#10;npm run reset -- --yes    # إعادة ضبط قاعدة البيانات</pre>'
+      + '<div class="hint">لو PostgreSQL غير متاح يتحول النظام تلقائيًا إلى SQLite في <span class="mono">data/ems.sqlite</span> (أو فرضه بـ <span class="mono">DB_CLIENT=sqlite</span>). الـ GPS يحتاج HTTPS أو localhost.</div>'));
+    host.appendChild(sec('4) أهم نقاط الـ API', table([
+      { label: 'الطريقة', align: 'center', render: (r) => '<span class="badge ' + (r.m === 'GET' ? 'muted' : 'brand') + '">' + r.m + '</span>' },
+      { label: 'المسار', render: (r) => '<span class="mono">' + esc(r.p) + '</span>' },
+      { label: 'الوظيفة', render: (r) => esc(r.w) }
+    ], [
+      { m: 'POST', p: '/api/auth/login', w: 'دخول + بصمة الجهاز + تنبيه الأدمن عند جهاز جديد' },
+      { m: 'GET', p: '/api/auth/me', w: 'بياناتي + تاريخ اليوم + أجهزتي' },
+      { m: 'POST', p: '/api/auth/change-password', w: 'تغيير كلمة المرور (الحالية مطلوبة)' },
+      { m: 'GET/POST', p: '/api/users', w: '(أدمن) قائمة/إنشاء موظف — وتعديل وحذف وكلمة مرور وسعر الساعة' },
+      { m: 'POST', p: '/api/attendance/check-in', w: 'تسجيل حضور بالـ GPS (رفض خارج النطاق بالرسالة المطلوبة)' },
+      { m: 'POST', p: '/api/attendance/check-out', w: 'تسجيل انصراف + حساب الساعات والأجر' },
+      { m: 'POST', p: '/api/attendance/preview', w: 'المسافة قبل الضغط (لا تسجّل شيئًا)' },
+      { m: 'GET', p: '/api/attendance/me', w: 'سجل الموظف: دخول/خروج/ساعات/أجر' },
+      { m: 'GET/PUT/DELETE', p: '/api/attendance[/:id]', w: '(أدمن) كل السجلات + تعديل يدوي معاد الحساب + حذف' },
+      { m: 'POST', p: '/api/attendance/manual', w: '(أدمن) تسجيل نيابة عن موظف (source=admin, updated_by)' },
+      { m: 'GET', p: '/api/payroll/summary · /employee/:id · /me', w: 'كشف الأجور: شهري/أسبوعي/مخصص' },
+      { m: 'GET/POST/DELETE', p: '/api/payroll/adjustments', w: 'بدلات ومكافآت وخصومات' },
+      { m: 'GET/POST/PUT/DELETE', p: '/api/expenses', w: 'المصروفات + /report + /mine + /export' },
+      { m: 'GET/PUT', p: '/api/settings', w: 'كل الإعدادات (lat/lng/radius…) مع إعادة حساب تلقائية' },
+      { m: 'GET', p: '/api/security/login-events · /devices', w: 'سجل الدخول وبصمات الأجهزة' },
+      { m: 'POST', p: '/api/security/devices/:id/trust', w: 'اعتماد/إلغاء اعتماد الجهاز' },
+      { m: 'GET', p: '/api/notifications/stream', w: 'SSE — تنبيهات فورية في المتصفح' },
+      { m: 'GET/POST/PUT/DELETE', p: '/api/pages', w: 'إضافة صفحات وأقسام مخصصة للقائمة الجانبية' },
+      { m: 'GET', p: '/api/reports/dashboard · my-dashboard', w: 'داشبورد الأدمن / داشبورد الموظف' },
+      { m: 'GET', p: '/api/…/export/*.csv', w: 'تصدير CSV للحضور والأجور والمصروفات والمصفوفة' }
+    ], { compact: true })));
+    host.appendChild(sec('5) منطق التسجيل خطوة بخطوة', '<ol style="margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:5px">'
+      + '<li>المتصفح يقرأ الموقع: <span class="mono">getCurrentPosition({ enableHighAccuracy: true })</span>.</li>'
+      + '<li>يُرسل <span class="mono">{ lat, lng, accuracy }</span> إلى <span class="mono">POST /api/attendance/check-in</span>.</li>'
+      + '<li>الخادم يحسب <span class="mono">haversineMeters(الموظف, مكان العمل)</span> ويقارنه بـ <span class="mono">radius_m</span>، ويفحص الدقة مقابل <span class="mono">max_accuracy_m</span>.</li>'
+      + '<li>داخل النطاق ⇒ صف واحد في <span class="mono">attendance</span> لكل موظف/يوم + سجل في <span class="mono">attendance_events</span>.</li>'
+      + '<li>خارج النطاق ⇒ <span class="mono">403</span> بالرسالة المطلوبة و<span class="mono">details:{code:"out_of_range", distance, radius, outsideBy}</span> — <b>ولا يُسجَّل حضور إطلاقًا</b>.</li>'
+      + '<li>رفض الإذن ⇒ رسالة التفعيل + <span class="mono">POST /api/attendance/gps-error</span> لوصول تنبيه للإدارة.</li>'
+      + '<li>الساعات = (خروج − دخول) − الراحة مع التقريب؛ والتأخير = max(0, دخول − بداية − سماح).</li>'
+      + '<li>الأجر = (ساعات عادية + إضافية × المعامل) × سعر الساعة؛ والصافي = الأساسي + البدلات − الخصومات.</li></ol>'));
+    host.appendChild(sec('6) أرقام من النسخة التجريبية الآن', '<div class="grid c4" style="padding:0">'
+      + '<div class="stat"><div class="k">موظفون</div><div class="v">' + DB.users.length + '</div></div>'
+      + '<div class="stat"><div class="k">سجلات حضور</div><div class="v">' + DB.attendance.length + '</div></div>'
+      + '<div class="stat"><div class="k">مصروفات</div><div class="v">' + DB.expenses.length + '</div></div>'
+      + '<div class="stat"><div class="k">صافي أجور ' + esc(monthLabel(m)) + '</div><div class="v">' + esc(money(monthNet)) + '</div></div></div>'));
+  };
+
+  /* ==================== الجرس والإقلاع ==================== */
+  function bell() {
+    const mine = DB.notifications.filter((n) => (n.audience === 'admin' ? isAdmin() : n.user_id === SESSION.user.id)).slice().reverse();
+    const unread = mine.filter((n) => !n.is_read);
+    let mm;
+    const body = mine.length
+      ? h('ul', { class: 'list', style: 'border:1px solid var(--line);border-radius:10px;overflow:hidden' },
+        mine.slice(0, 14).map((n) => h('li', {}, [
+          h('span', { class: 'dot ' + (n.is_read ? '' : n.severity === 'warning' ? 'warn' : 'ok') }),
+          h('div', { style: 'flex:1', html: '<b>' + esc(n.title) + '</b><div class="small muted">' + esc(n.message) + '</div><div class="tiny muted">' + dateTimeStr(n.created_at) + '</div>' }),
+          n.is_read ? h('span', { class: 'badge muted', text: 'مقروء' }) : h('button', { class: 'btn sm', text: 'مقروء', onclick: () => { n.is_read = 1; save(); renderNav(); mm.close(); toast('تم تعليم التنبيه كمقروء', 'ok'); } })
+        ])))
+      : h('div', { class: 'empty', text: 'لا تنبيهات' });
+    mm = modal({
+      title: '🔔 التنبيهات (' + unread.length + ' جديد)', width: '620px', body: body,
+      footer: [h('button', { class: 'btn', text: 'تعليم الكل كمقروء', onclick: () => { mine.forEach((n) => { n.is_read = 1; }); save(); renderNav(); mm.close(); toast('تم تعليم التنبيهات كمقروءة', 'ok'); } })]
+    });
+  }
+
+  function boot() {
+    $('#wpName').textContent = DB.settings.workplace_name;
+    $('#sideFoot').innerHTML = 'نسخة ملف واحد · بيانات في متصفحك<br>' + esc(new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }));
+    $('#todayBadge').textContent = dayName(todayStr()) + ' ' + dmy(todayStr());
+    $('#logoutBtn').onclick = logout;
+    $('#bellBtn').onclick = bell;
+    $('#burger').onclick = () => document.body.classList.toggle('nav-open');
+    $('#avatar').textContent = String(SESSION.user.full_name || '؟').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
+    $('#loginScreen').classList.add('off');
+    $('#app').classList.remove('off');
+    go(isAdmin() ? 'dashboard' : 'mydash');
+  }
+
+  load();
+
+  $('#loginForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('#submitBtn');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span><span>جارٍ التحقق…</span>';
+    $('#loginAlert').innerHTML = '';
+    try {
+      const r = await doLogin($('#username').value, $('#password').value);
+      try { localStorage.setItem('ems-offline-session', JSON.stringify({ id: r.user.id })); } catch (e) { }
+      boot();
+      toast('أهلًا ' + esc(r.user.full_name) + ' 👋', 'ok');
+      if (r.device.firstEverDevice) toast('تم تعريف هذا الجهاز كجهازك المعتاد ✓', 'info');
+      else if (r.device.isNewDevice) toast('⚠️ تم تسجيل دخول من <b>جهاز غير معتاد</b> — أُرسل تنبيه للإدارة', 'warn', 7000);
+    } catch (e) {
+      $('#loginAlert').innerHTML = '<div class="alert bad">' + esc(e.message) + '</div>';
+    } finally {
+      btn.disabled = false; btn.innerHTML = old;
+    }
+  });
+  Array.prototype.forEach.call($$('#loginForm [data-quick]'), (b) => {
+    b.onclick = () => {
+      $('#username').value = b.dataset.quick;
+      $('#password').value = b.dataset.quick === 'admin' ? 'Admin@123' : 'Emp@12345';
+      $('#loginForm').dispatchEvent(new Event('submit'));
+    };
+  });
+  $('#resetDemo').onclick = async () => {
+    if (!(await confirmBox('سوف تُحذف كل التعديلات التي أدخلتها ويُسترجع الوضع التجريبي الأصلي. متابعة؟', 'إعادة ضبط البيانات'))) return;
+    try { localStorage.removeItem(LS); localStorage.removeItem('ems-offline-session'); } catch (e) { }
+    location.reload();
+  };
+
+  (async function () {
+    const fp = await collectFingerprint();
+    $('#fpHint').innerHTML = 'بصمة هذا الجهاز: <span class="mono">' + esc(fp.short) + '</span> · ' + esc(fp.label);
+    let raw = null;
+    try { raw = localStorage.getItem('ems-offline-session'); } catch (e) { }
+    if (raw) {
+      const u = DB.users.find((x) => x.id === (JSON.parse(raw) || {}).id);
+      if (u && u.status === 'active') { SESSION.user = u; boot(); }
+    }
+  })();
+})();
+
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a498a1509d4ce1e4',t:'MTc5MTgzNDU5MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c01a94c73b74392e4234840661791215815920" integrity="sha512-L0ha0OXavK/8okipN9F8BtP84dg9DUhPERbBXzwI6dgTA55d2+yweo3pn5CSFYs45/r8md2+xvUPtTdvTNRfjA==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>
